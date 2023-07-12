@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{BCS_EXTENSION, DEFAULT_BUILD_DIR, DEFAULT_STORAGE_DIR};
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Error, Result};
 use move_binary_format::{
     access::ModuleAccess,
     binary_views::BinaryIndexedView,
@@ -18,6 +18,7 @@ use move_core_types::{
     metadata::Metadata,
     parser,
     resolver::{resource_size, ModuleResolver, ResourceResolver},
+    value::MoveTypeLayout,
 };
 use move_disassembler::disassembler::Disassembler;
 use move_ir_types::location::Spanned;
@@ -422,6 +423,16 @@ impl ResourceResolver for OnDiskStateView {
         let buf = self.get_resource_bytes(*address, struct_tag.clone())?;
         let buf_size = resource_size(&buf);
         Ok((buf, buf_size))
+    }
+
+    fn get_marked_resource_with_metadata(
+        &self,
+        address: &AccountAddress,
+        typ: &StructTag,
+        metadata: &[Metadata],
+        _layout: &MoveTypeLayout,
+    ) -> std::result::Result<(Option<Vec<u8>>, usize), Error> {
+        self.get_resource_with_metadata(address, typ, metadata)
     }
 }
 

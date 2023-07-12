@@ -10,6 +10,7 @@ use move_core_types::{
     language_storage::{ModuleId, StructTag},
     metadata::Metadata,
     resolver::{resource_size, ModuleResolver, MoveResolver, ResourceResolver},
+    value::MoveTypeLayout,
 };
 #[cfg(feature = "table-extension")]
 use move_table_extension::{TableChangeSet, TableHandle, TableResolver};
@@ -45,6 +46,16 @@ impl ResourceResolver for BlankStorage {
         _tag: &StructTag,
         _metadata: &[Metadata],
     ) -> Result<(Option<Vec<u8>>, usize)> {
+        Ok((None, 0))
+    }
+
+    fn get_marked_resource_with_metadata(
+        &self,
+        _address: &AccountAddress,
+        _typ: &StructTag,
+        _metadata: &[Metadata],
+        _layout: &MoveTypeLayout,
+    ) -> Result<(Option<Vec<u8>>, usize), Error> {
         Ok((None, 0))
     }
 }
@@ -101,6 +112,16 @@ impl<'a, 'b, S: ResourceResolver> ResourceResolver for DeltaStorage<'a, 'b, S> {
 
         // TODO
         self.base.get_resource_with_metadata(address, tag, metadata)
+    }
+
+    fn get_marked_resource_with_metadata(
+        &self,
+        address: &AccountAddress,
+        typ: &StructTag,
+        metadata: &[Metadata],
+        _layout: &MoveTypeLayout,
+    ) -> Result<(Option<Vec<u8>>, usize), Error> {
+        self.get_resource_with_metadata(address, typ, metadata)
     }
 }
 
@@ -308,6 +329,16 @@ impl ResourceResolver for InMemoryStorage {
             return Ok((buf, buf_size));
         }
         Ok((None, 0))
+    }
+
+    fn get_marked_resource_with_metadata(
+        &self,
+        address: &AccountAddress,
+        typ: &StructTag,
+        metadata: &[Metadata],
+        _layout: &MoveTypeLayout,
+    ) -> std::result::Result<(Option<Vec<u8>>, usize), Error> {
+        self.get_resource_with_metadata(address, typ, metadata)
     }
 }
 

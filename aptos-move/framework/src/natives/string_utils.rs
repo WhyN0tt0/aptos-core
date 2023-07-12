@@ -285,6 +285,9 @@ fn native_format_impl(
             )?;
             out.push('}');
         },
+        MoveTypeLayout::Aggregatable(ty) => {
+            native_format_impl(context, ty, val, depth, out)?;
+        },
     };
     if context.include_int_type {
         write!(out, "{}", suffix).unwrap();

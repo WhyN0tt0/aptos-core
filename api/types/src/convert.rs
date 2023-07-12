@@ -803,6 +803,9 @@ impl<'a, R: MoveResolverExt + ?Sized> MoveConverter<'a, R> {
             MoveTypeLayout::Signer => {
                 bail!("unexpected move type {:?} for value {:?}", layout, val)
             },
+            MoveTypeLayout::Aggregatable(inner_layout) => {
+                self.try_into_vm_value_from_layout(inner_layout, val)?
+            },
         })
     }
 

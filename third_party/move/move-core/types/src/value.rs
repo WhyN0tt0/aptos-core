@@ -114,6 +114,10 @@ pub enum MoveTypeLayout {
     U32,
     #[serde(rename(serialize = "u256", deserialize = "u256"))]
     U256,
+
+    // Special marker which allows annotating aggregatable types.
+    // In the future, we might want to support different markings.
+    Aggregatable(Box<MoveTypeLayout>),
 }
 
 impl MoveValue {
@@ -328,6 +332,7 @@ impl<'d> serde::de::DeserializeSeed<'d> for &MoveTypeLayout {
             MoveTypeLayout::Vector(layout) => Ok(MoveValue::Vector(
                 deserializer.deserialize_seq(VectorElementVisitor(layout))?,
             )),
+            MoveTypeLayout::Aggregatable(layout) => layout.deserialize(deserializer),
         }
     }
 }
@@ -529,6 +534,7 @@ impl fmt::Display for MoveTypeLayout {
             Vector(typ) => write!(f, "vector<{}>", typ),
             Struct(s) => write!(f, "{}", s),
             Signer => write!(f, "signer"),
+            Aggregatable(typ) => write!(f, "{}", typ),
         }
     }
 }
@@ -578,6 +584,10 @@ impl TryInto<TypeTag> for &MoveTypeLayout {
                 TypeTag::Vector(Box::new(inner_type.try_into()?))
             },
             MoveTypeLayout::Struct(v) => TypeTag::Struct(Box::new(v.try_into()?)),
+            MoveTypeLayout::Aggregatable(v) => {
+                let inner_type = &**v;
+                inner_type.try_into()?
+            },
         })
     }
 }

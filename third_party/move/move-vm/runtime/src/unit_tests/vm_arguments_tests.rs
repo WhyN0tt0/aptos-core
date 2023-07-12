@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::move_vm::MoveVM;
+use anyhow::Error;
 use move_binary_format::{
     errors::VMResult,
     file_format::{
@@ -21,7 +22,7 @@ use move_core_types::{
     metadata::Metadata,
     resolver::{ModuleResolver, ResourceResolver},
     u256::U256,
-    value::{serialize_values, MoveValue},
+    value::{serialize_values, MoveTypeLayout, MoveValue},
     vm_status::{StatusCode, StatusType},
 };
 use move_vm_types::gas::UnmeteredGasMeter;
@@ -266,6 +267,16 @@ impl ResourceResolver for RemoteStore {
         _tag: &StructTag,
         _metadata: &[Metadata],
     ) -> anyhow::Result<(Option<Vec<u8>>, usize)> {
+        Ok((None, 0))
+    }
+
+    fn get_marked_resource_with_metadata(
+        &self,
+        _address: &AccountAddress,
+        _typ: &StructTag,
+        _metadata: &[Metadata],
+        _layout: &MoveTypeLayout,
+    ) -> Result<(Option<Vec<u8>>, usize), Error> {
         Ok((None, 0))
     }
 }

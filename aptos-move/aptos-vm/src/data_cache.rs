@@ -26,6 +26,7 @@ use move_core_types::{
     language_storage::{ModuleId, StructTag},
     metadata::Metadata,
     resolver::{resource_size, ModuleResolver, ResourceResolver},
+    value::MoveTypeLayout,
     vm_status::StatusCode,
 };
 use std::{cell::RefCell, collections::BTreeMap, ops::Deref};
@@ -172,6 +173,16 @@ impl<'a, S: StateView> ResourceResolver for StorageAdapter<'a, S> {
         struct_tag: &StructTag,
         metadata: &[Metadata],
     ) -> anyhow::Result<(Option<Vec<u8>>, usize)> {
+        Ok(self.get_any_resource(address, struct_tag, metadata)?)
+    }
+
+    fn get_marked_resource_with_metadata(
+        &self,
+        address: &AccountAddress,
+        struct_tag: &StructTag,
+        metadata: &[Metadata],
+        _layout: &MoveTypeLayout,
+    ) -> Result<(Option<Vec<u8>>, usize), Error> {
         Ok(self.get_any_resource(address, struct_tag, metadata)?)
     }
 }

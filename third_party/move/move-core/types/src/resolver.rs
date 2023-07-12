@@ -6,6 +6,7 @@ use crate::{
     account_address::AccountAddress,
     language_storage::{ModuleId, StructTag},
     metadata::Metadata,
+    value::MoveTypeLayout,
 };
 use anyhow::Error;
 
@@ -46,6 +47,14 @@ pub trait ResourceResolver {
         typ: &StructTag,
         metadata: &[Metadata],
     ) -> Result<(Option<Vec<u8>>, usize), Error>;
+
+    fn get_marked_resource_with_metadata(
+        &self,
+        address: &AccountAddress,
+        typ: &StructTag,
+        metadata: &[Metadata],
+        layout: &MoveTypeLayout,
+    ) -> Result<(Option<Vec<u8>>, usize), Error>;
 }
 
 /// A persistent storage implementation that can resolve both resources and modules
@@ -71,6 +80,16 @@ impl<T: ResourceResolver + ?Sized> ResourceResolver for &T {
         metadata: &[Metadata],
     ) -> Result<(Option<Vec<u8>>, usize), Error> {
         (**self).get_resource_with_metadata(address, tag, metadata)
+    }
+
+    fn get_marked_resource_with_metadata(
+        &self,
+        address: &AccountAddress,
+        typ: &StructTag,
+        metadata: &[Metadata],
+        layout: &MoveTypeLayout,
+    ) -> Result<(Option<Vec<u8>>, usize), Error> {
+        (**self).get_marked_resource_with_metadata(address, typ, metadata, layout)
     }
 }
 

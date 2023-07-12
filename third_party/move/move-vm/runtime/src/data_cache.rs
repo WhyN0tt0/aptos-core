@@ -181,7 +181,7 @@ impl<'r> TransactionDataCache<'r> {
                 },
             };
             // TODO(Gas): Shall we charge for this?
-            let ty_layout = loader.type_to_type_layout(ty)?;
+            let (ty_layout, marked) = loader.type_to_marked_type_layout(ty)?;
 
             let module = loader.get_module(&ty_tag.module_id());
             let metadata: &[Metadata] = match &module {
@@ -189,13 +189,27 @@ impl<'r> TransactionDataCache<'r> {
                 None => &[],
             };
 
-            let (data, bytes_loaded) = self
-                .remote
-                .get_resource_with_metadata(&addr, &ty_tag, metadata)
-                .map_err(|err| {
-                    let msg = format!("Unexpected storage error: {:?}", err);
-                    PartialVMError::new(StatusCode::STORAGE_ERROR).with_message(msg)
-                })?;
+            // TODO: Next step.
+            // If marked, get_resource_with_metadata should propagate type layout
+            // for materialization, and we should use resolve differently.
+
+            let (data, bytes_loaded) = if marked {
+                self.remote
+                    .get_marked_resource_with_metadata(&addr, &ty_tag, metadata, &ty_layout)
+                    .map_err(|err| {
+                        let msg = format!("Unexpected storage error: {:?}", err);
+                        PartialVMError::new(StatusCode::STORAGE_ERROR).with_message(msg)
+                    })?
+                // At this point all IDs are replaced.
+            } else {
+                self.remote
+                    .get_resource_with_metadata(&addr, &ty_tag, metadata)
+                    .map_err(|err| {
+                        let msg = format!("Unexpected storage error: {:?}", err);
+                        PartialVMError::new(StatusCode::STORAGE_ERROR).with_message(msg)
+                    })?
+            };
+
             load_res = Some(NumBytes::new(bytes_loaded as u64));
 
             let gv = match data {

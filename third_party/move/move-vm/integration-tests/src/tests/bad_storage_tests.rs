@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::compiler::{as_module, as_script, compile_units};
+use anyhow::Error;
 use move_binary_format::errors::{Location, PartialVMError};
 use move_core_types::{
     account_address::AccountAddress,
@@ -11,7 +12,7 @@ use move_core_types::{
     language_storage::{ModuleId, StructTag},
     metadata::Metadata,
     resolver::{ModuleResolver, ResourceResolver},
-    value::{serialize_values, MoveValue},
+    value::{serialize_values, MoveTypeLayout, MoveValue},
     vm_status::{StatusCode, StatusType},
 };
 use move_vm_runtime::move_vm::MoveVM;
@@ -527,6 +528,18 @@ impl ResourceResolver for BogusStorage {
         _tag: &StructTag,
         _metadata: &[Metadata],
     ) -> anyhow::Result<(Option<Vec<u8>>, usize)> {
+        Ok(Err(
+            PartialVMError::new(self.bad_status_code).finish(Location::Undefined)
+        )?)
+    }
+
+    fn get_marked_resource_with_metadata(
+        &self,
+        _address: &AccountAddress,
+        _typ: &StructTag,
+        _metadata: &[Metadata],
+        _layout: &MoveTypeLayout,
+    ) -> Result<(Option<Vec<u8>>, usize), Error> {
         Ok(Err(
             PartialVMError::new(self.bad_status_code).finish(Location::Undefined)
         )?)
