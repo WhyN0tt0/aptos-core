@@ -9,12 +9,27 @@ use crate::{
 };
 use aptos_gas_algebra_ext::{AbstractValueSize, InternalGasPerAbstractValueUnit};
 use aptos_types::on_chain_config::{Features, TimedFeatures};
-use move_core_types::gas_algebra::InternalGas;
+use move_core_types::{gas_algebra::InternalGas, value::MoveTypeLayout};
 use move_vm_runtime::native_functions::NativeFunction;
 use move_vm_types::{loaded_data::runtime_types::Type, values::Value};
 use smallvec::{smallvec, SmallVec};
 use std::{collections::VecDeque, sync::Arc};
 
+/// Cached emitted module events.
+#[derive(Tid, default)]
+pub struct NativeEventContext<'a> {
+    resolver: &'a dyn MoveResolverExt,
+    events: Vec<(Type, MoveTypeLayout, Value)>,
+}
+
+impl<'a> NativeEventContext<'a> {
+    pub fn new(resolver: &dyn MoveResolverExt) -> Self {
+        Self {
+            resolver,
+            events: Vec::new(),
+        }
+    }
+}
 /***************************************************************************************************
  * native fun write_to_event_store
  *
@@ -68,6 +83,38 @@ pub fn make_native_write_to_event_store(
     }
 }
 
+#[inline]
+fn native_write_module_event_to_store(
+    gas_params: &WriteToEventStoreGasParameters,
+    calc_abstract_val_size: impl FnOnce(&Value) -> AbstractValueSize,
+    context: &mut SafeNativeContext,
+    mut ty_args: Vec<Type>,
+    mut arguments: VecDeque<Value>,
+) -> SafeNativeResult<SmallVec<[Value; 1]>> {
+    debug_assert!(ty_args.len() == 1);
+    debug_assert!(arguments.len() == 1);
+
+    let ty = ty_args.pop().unwrap();
+    let msg = arguments.pop_back().unwrap();
+
+    // TODO(Gas): Get rid of abstract memory size
+    context.charge(
+        gas_params.base + gas_params.per_abstract_value_unit * calc_abstract_val_size(&msg),
+    )?;
+
+    let ctx = context.extensions().get_mut::<NativeEventContext>();
+    let layout = context.type_to_type_layout(&ty)?;
+    ctx.events
+        .ctx
+        .events
+        .push((ty, calc_abstract_val_size(&msg), msg));
+
+    if !context.save_event(y, msg)? {
+        return Err(SafeNativeError::Abort { abort_code: 0 });
+    }
+
+    Ok(smallvec![])
+}
 /***************************************************************************************************
  * module
  *
@@ -83,15 +130,26 @@ pub fn make_all(
     timed_features: TimedFeatures,
     features: Arc<Features>,
 ) -> impl Iterator<Item = (String, NativeFunction)> {
-    let natives = [(
-        "write_to_event_store",
-        make_safe_native(
-            gas_params.write_to_event_store,
-            timed_features,
-            features,
-            make_native_write_to_event_store(calc_abstract_val_size),
+    let natives = [
+        (
+            "write_to_event_store",
+            make_safe_native(
+                gas_params.write_to_event_store,
+                timed_features.clone(),
+                features.clone(),
+                make_native_write_to_event_store(calc_abstract_val_size),
+            ),
         ),
-    )];
+        (
+            "write_to_module_event_store",
+            make_safe_native(
+                gas_params.write_to_event_store,
+                timed_features,
+                features,
+                make_native_write_to_event_store(calc_abstract_val_size),
+            ),
+        ),
+    ];
 
     make_module_natives(natives)
 }
