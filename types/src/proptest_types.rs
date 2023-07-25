@@ -640,7 +640,7 @@ impl ContractEventGen {
         *event_handle.count_mut() += 1;
         let event_key = event_handle.key();
 
-        ContractEvent::new(*event_key, sequence_number, self.type_tag, self.payload)
+        ContractEvent::new_v0(*event_key, sequence_number, self.type_tag, self.payload)
     }
 }
 
@@ -726,7 +726,7 @@ impl ContractEvent {
             vec(any::<u8>(), 1..10),
         )
             .prop_map(|(event_key, seq_num, type_tag, event_data)| {
-                ContractEvent::new(event_key, seq_num, type_tag, event_data)
+                ContractEvent::new_v0(event_key, seq_num, type_tag, event_data)
             })
     }
 }

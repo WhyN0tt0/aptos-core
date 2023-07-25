@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
+    get_metadata,
     natives::helpers::{
         make_module_natives, make_safe_native, SafeNativeContext, SafeNativeError, SafeNativeResult,
     },
@@ -9,17 +10,23 @@ use crate::{
 };
 use aptos_gas_algebra_ext::{AbstractValueSize, InternalGasPerAbstractValueUnit};
 use aptos_types::on_chain_config::{Features, TimedFeatures};
+use aptos_utils::aptos_try;
+use ark_std::iterable::Iterable;
+use move_binary_format::errors::{PartialVMError, PartialVMResult};
+use move_core_types::language_storage::{StructTag, TypeTag};
+use move_core_types::resolver::MoveResolver;
+use move_core_types::vm_status::StatusCode;
 use move_core_types::{gas_algebra::InternalGas, value::MoveTypeLayout};
 use move_vm_runtime::native_functions::NativeFunction;
-use move_vm_types::{loaded_data::runtime_types::Type, values::Value};
+use move_vm_types::{loaded_data::runtime_types::Type, pop_arg, values::Value};
 use smallvec::{smallvec, SmallVec};
 use std::{collections::VecDeque, sync::Arc};
 
 /// Cached emitted module events.
 #[derive(Tid, default)]
 pub struct NativeEventContext<'a> {
-    resolver: &'a dyn MoveResolverExt,
-    events: Vec<(Type, MoveTypeLayout, Value)>,
+    resolver: &'a dyn MoveResolver,
+    events: Vec<(StructTag, Vec<u8>)>,
 }
 
 impl<'a> NativeEventContext<'a> {
@@ -28,6 +35,10 @@ impl<'a> NativeEventContext<'a> {
             resolver,
             events: Vec::new(),
         }
+    }
+
+    pub fn into_events(self) -> Vec<(StructTag, Vec<u8>)> {
+        self.events
     }
 }
 /***************************************************************************************************
@@ -103,15 +114,30 @@ fn native_write_module_event_to_store(
     )?;
 
     let ctx = context.extensions().get_mut::<NativeEventContext>();
-    let layout = context.type_to_type_layout(&ty)?;
-    ctx.events
-        .ctx
-        .events
-        .push((ty, calc_abstract_val_size(&msg), msg));
-
-    if !context.save_event(y, msg)? {
-        return Err(SafeNativeError::Abort { abort_code: 0 });
-    }
+    let struct_tag = match context.type_to_type_tag(&ty)? {
+        TypeTag::Struct(struct_tag) => Ok(*struct_tag),
+        _ => Err(SafeNativeError::Abort {
+            // not an struct type
+            abort_code: 0x10001,
+        }),
+    }?;
+    match check_event(ctx, &struct_tag) {
+        Some(true) => (),
+        _ => {
+            return Err(SafeNativeError::Abort {
+                // not a struct with event attribute
+                abort_code: 0x10001,
+            });
+        },
+    };
+    let layout = get_type_layout(context, &ty)?;
+    let blob = msg.simple_serialize(&layout).ok_or_else(|| {
+        SafeNativeError::InvariantViolation(
+            PartialVMError::new(StatusCode::VALUE_SERIALIZATION_ERROR)
+                .with_message("Event serialization failure".to_string()),
+        )
+    })?;
+    ctx.events.push((struct_tag, blob));
 
     Ok(smallvec![])
 }
@@ -152,4 +178,25 @@ pub fn make_all(
     ];
 
     make_module_natives(natives)
+}
+
+fn check_event(ctx: &mut NativeEventContext, struct_tag: &StructTag) -> Option<bool> {
+    // check the event struct is valid.
+    let md = get_metadata(
+        ctx.resolver
+            .get_module_metadata(&struct_tag.module_id())
+            .as_slice(),
+    )?;
+    Some(
+        md.struct_attributes
+            .get(struct_tag.name.as_ident_str().as_str())?
+            .iter()
+            .any(|attr| attr.is_event()),
+    )
+}
+
+fn get_type_layout(context: &SafeNativeContext, ty: &Type) -> PartialVMResult<MoveTypeLayout> {
+    context
+        .type_to_type_layout(ty)?
+        .ok_or_else(|| partial_extension_error("cannot determine type layout"))
 }

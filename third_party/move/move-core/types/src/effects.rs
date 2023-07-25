@@ -2,6 +2,7 @@
 // Copyright (c) The Move Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::value::MoveTypeLayout;
 use crate::{
     account_address::AccountAddress,
     identifier::Identifier,
@@ -322,3 +323,4 @@ pub type AccountChangeSet = AccountChanges<Vec<u8>, Vec<u8>>;
 pub type ChangeSet = Changes<Vec<u8>, Vec<u8>>;
 
 pub type Event = (Vec<u8>, u64, TypeTag, Vec<u8>);
+pub type ModuleEvent = (StructTag, Vec<u8>);

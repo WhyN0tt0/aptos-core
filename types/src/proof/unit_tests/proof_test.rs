@@ -224,10 +224,10 @@ fn test_verify_three_element_sparse_merkle() {
 
     {
         // Construct a proof of key1.
-        let proof = SparseMerkleProof::new(Some(leaf1), vec![
-            internal_b_hash,
-            *SPARSE_MERKLE_PLACEHOLDER_HASH,
-        ]);
+        let proof = SparseMerkleProof::new(
+            Some(leaf1),
+            vec![internal_b_hash, *SPARSE_MERKLE_PLACEHOLDER_HASH],
+        );
 
         // The exact key value exists.
         assert!(proof.verify(root_hash, key1, Some(&blob1)).is_ok());
@@ -349,10 +349,11 @@ fn test_accumulator_extension_proof() {
     assert_eq!(derived_tree.version(), 0);
 
     // Test multiple values
-    let two_tree =
-        AccumulatorExtensionProof::<TestOnlyHasher>::new(vec![HashValue::zero()], 1, vec![
-            HashValue::zero(),
-        ]);
+    let two_tree = AccumulatorExtensionProof::<TestOnlyHasher>::new(
+        vec![HashValue::zero()],
+        1,
+        vec![HashValue::zero()],
+    );
 
     let derived_tree = two_tree.verify(HashValue::zero()).unwrap();
     let two_hash = TestAccumulatorInternalNode::new(HashValue::zero(), HashValue::zero()).hash();
@@ -600,5 +601,5 @@ fn create_transaction_info(
 
 fn create_event() -> ContractEvent {
     let event_key = EventKey::new(0, AccountAddress::random());
-    ContractEvent::new(event_key, 0, TypeTag::Bool, bcs::to_bytes(&0).unwrap())
+    ContractEvent::new_v0(event_key, 0, TypeTag::Bool, bcs::to_bytes(&0).unwrap())
 }

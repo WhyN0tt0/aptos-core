@@ -271,7 +271,7 @@ prop_compose! {
                 Vec::new(), // failed_proposers
                 timestamp,
             );
-            let event = ContractEvent::new(
+            let event = ContractEvent::new_v0(
                 new_block_event_key(),
                 seq,
                 TypeTag::Struct(Box::new(NewBlockEvent::struct_tag())),

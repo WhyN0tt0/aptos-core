@@ -44,15 +44,4 @@ pub trait MoveResolverExt:
         })
         .is_some()
     }
-
-    fn is_event(&self, struct_tag: &StructTag) -> bool {
-        aptos_try!({
-            let md =
-                aptos_framework::get_metadata(&self.get_module_metadata(&struct_tag.module_id()))?;
-            md.struct_attributes
-                .get(struct_tag.name.as_ident_str().as_str())?
-                .iter()
-                .any(|attr| attr.is_event())
-        })
-    }
 }
