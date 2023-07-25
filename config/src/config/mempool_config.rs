@@ -70,7 +70,7 @@ impl Default for MempoolConfig {
             capacity: 2_000_000,
             capacity_bytes: 2 * 1024 * 1024 * 1024,
             capacity_per_user: 100,
-            default_failovers: 1,
+            default_failovers: 0,
             shared_mempool_peer_update_interval_ms: 1_000,
             system_transaction_timeout_secs: 600,
             system_transaction_gc_interval_ms: 60_000,
