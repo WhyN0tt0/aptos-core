@@ -579,15 +579,9 @@ impl TryInto<TypeTag> for &MoveTypeLayout {
             MoveTypeLayout::U128 => TypeTag::U128,
             MoveTypeLayout::U256 => TypeTag::U256,
             MoveTypeLayout::Signer => TypeTag::Signer,
-            MoveTypeLayout::Vector(v) => {
-                let inner_type = &**v;
-                TypeTag::Vector(Box::new(inner_type.try_into()?))
-            },
+            MoveTypeLayout::Vector(v) => TypeTag::Vector(Box::new(v.as_ref().try_into()?)),
             MoveTypeLayout::Struct(v) => TypeTag::Struct(Box::new(v.try_into()?)),
-            MoveTypeLayout::Aggregatable(v) => {
-                let inner_type = &**v;
-                inner_type.try_into()?
-            },
+            MoveTypeLayout::Aggregatable(v) => v.as_ref().try_into()?,
         })
     }
 }

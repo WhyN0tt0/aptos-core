@@ -18,7 +18,7 @@ fn assert_same_serialization(v: &MoveValue, l1: &MoveTypeLayout, l2: &MoveTypeLa
 
 macro_rules! marked {
     ($layout:expr) => {
-        MoveTypeLayout::Marked(Box::new($layout))
+        MoveTypeLayout::Aggregatable(Box::new($layout))
     };
 }
 

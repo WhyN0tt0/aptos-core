@@ -19,7 +19,7 @@ impl ValueExchange for TestExchange {
         // Identifiers can be generated using the number of entries stored
         // so far.
         let id = Identifier(data.len() as u64);
-        data.insert(id.clone(), value);
+        data.insert(id, value);
         Ok(id)
     }
 
