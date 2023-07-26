@@ -9,13 +9,14 @@ use crate::{
     safely_pop_arg,
 };
 use aptos_gas_algebra_ext::{AbstractValueSize, InternalGasPerAbstractValueUnit};
+use aptos_types::contract_event::ContractEvent;
 use aptos_types::on_chain_config::{Features, TimedFeatures};
 use aptos_utils::aptos_try;
 use ark_std::iterable::Iterable;
 use move_binary_format::errors::{PartialVMError, PartialVMResult};
 use move_core_types::language_storage::{StructTag, TypeTag};
 use move_core_types::resolver::MoveResolver;
-use move_core_types::vm_status::StatusCode;
+use move_core_types::vm_status::{StatusCode, VMStatus};
 use move_core_types::{gas_algebra::InternalGas, value::MoveTypeLayout};
 use move_vm_runtime::native_functions::NativeFunction;
 use move_vm_types::{loaded_data::runtime_types::Type, pop_arg, values::Value};
@@ -26,7 +27,7 @@ use std::{collections::VecDeque, sync::Arc};
 #[derive(Tid, default)]
 pub struct NativeEventContext<'a> {
     resolver: &'a dyn MoveResolver,
-    events: Vec<(StructTag, Vec<u8>)>,
+    events: Vec<ContractEvent>,
 }
 
 impl<'a> NativeEventContext<'a> {
@@ -37,7 +38,7 @@ impl<'a> NativeEventContext<'a> {
         }
     }
 
-    pub fn into_events(self) -> Vec<(StructTag, Vec<u8>)> {
+    pub fn into_events(self) -> Vec<ContractEvent> {
         self.events
     }
 }
@@ -78,6 +79,17 @@ fn native_write_to_event_store(
         return Err(SafeNativeError::Abort { abort_code: 0 });
     }
 
+    let ctx = context.extensions().get_mut::<NativeEventContext>();
+    let ty_tag = context.type_to_type_tag(&ty)?;
+    let ty_layout = get_type_layout(context, &ty)?;
+    let blob = val
+        .simple_serialize(&ty_layout)
+        .ok_or_else(|| PartialVMError::new(StatusCode::INTERNAL_TYPE_ERROR))?;
+    let key = bcs::from_bytes(guid.as_slice())
+        .map_err(|_| VMStatus::error(StatusCode::EVENT_KEY_MISMATCH, None))?;
+
+    ctx.events
+        .push(ContractEvent::new_v0(key, seq_num, ty_tag, blob));
     Ok(smallvec![])
 }
 
@@ -137,7 +149,7 @@ fn native_write_module_event_to_store(
                 .with_message("Event serialization failure".to_string()),
         )
     })?;
-    ctx.events.push((struct_tag, blob));
+    ctx.events.push(ContractEvent::new_v1(struct_tag, blob));
 
     Ok(smallvec![])
 }

@@ -51,7 +51,6 @@ impl AccountDataCache {
 pub(crate) struct TransactionDataCache<'r> {
     remote: &'r dyn MoveResolver,
     account_map: BTreeMap<AccountAddress, AccountDataCache>,
-    event_data: Vec<(Vec<u8>, u64, Type, MoveTypeLayout, Value)>,
 }
 
 impl<'r> TransactionDataCache<'r> {
@@ -61,7 +60,6 @@ impl<'r> TransactionDataCache<'r> {
         TransactionDataCache {
             remote,
             account_map: BTreeMap::new(),
-            event_data: vec![],
         }
     }
 

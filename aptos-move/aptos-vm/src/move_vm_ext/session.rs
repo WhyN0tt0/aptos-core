@@ -168,7 +168,7 @@ impl<'r, 'l> SessionExt<'r, 'l> {
         configs: &ChangeSetConfigs,
     ) -> VMResult<VMChangeSet> {
         let move_vm = self.inner.get_move_vm();
-        let (change_set, events, mut extensions) = self.inner.finish_with_extensions()?;
+        let (change_set, mut extensions) = self.inner.finish_with_extensions()?;
 
         let (change_set, resource_group_change_set) =
             Self::split_and_merge_resource_groups(move_vm, self.remote, change_set)?;
@@ -183,7 +183,7 @@ impl<'r, 'l> SessionExt<'r, 'l> {
         let aggregator_change_set = aggregator_context.into_change_set();
 
         let event_context: NativeEventContext = extensions.remove();
-        module_events = event_context.into_events();
+        let events = event_context.into_events();
 
         let change_set = Self::convert_change_set(
             self.remote,
@@ -192,7 +192,7 @@ impl<'r, 'l> SessionExt<'r, 'l> {
             current_time.as_ref(),
             change_set,
             resource_group_change_set,
-            (events, module_events),
+            events,
             table_change_set,
             aggregator_change_set,
             ap_cache,
@@ -320,7 +320,7 @@ impl<'r, 'l> SessionExt<'r, 'l> {
         current_time: Option<&CurrentTimeMicroseconds>,
         change_set: MoveChangeSet,
         resource_group_change_set: MoveChangeSet,
-        events: (Vec<MoveEvent>, Vec<ModuleEvent>),
+        events: Vec<ContractEvent>,
         table_change_set: TableChangeSet,
         aggregator_change_set: AggregatorChangeSet,
         ap_cache: &mut C,
@@ -402,17 +402,7 @@ impl<'r, 'l> SessionExt<'r, 'l> {
             .freeze()
             .map_err(|_| VMStatus::error(StatusCode::DATA_FORMAT_ERROR, None))?;
 
-        let mut mixed_events = events
-            .0
-            .into_iter()
-            .map(|(guid, seq_num, ty_tag, blob)| {
-                let key = bcs::from_bytes(guid.as_slice())
-                    .map_err(|_| VMStatus::error(StatusCode::EVENT_KEY_MISMATCH, None))?;
-                Ok(ContractEvent::new_v0(key, seq_num, ty_tag, blob))
-            })
-            .collect::<Result<Vec<_>, VMStatus>>()?;
-        mixed_events.extend(events.1);
-        VMChangeSet::new(write_set, delta_change_set, mixed_events, configs)
+        VMChangeSet::new(write_set, delta_change_set, events, configs)
     }
 }
 
