@@ -317,7 +317,7 @@ impl EventStore {
             .iter()
             .enumerate()
             .try_for_each::<_, Result<_>>(|(idx, event)| {
-                if !skip_index {
+                if !skip_index && matches!(event, ContractEvent::V0(_)) {
                     batch.put::<EventByKeySchema>(
                         &(*event.key(), event.sequence_number()),
                         &(version, idx as u64),
