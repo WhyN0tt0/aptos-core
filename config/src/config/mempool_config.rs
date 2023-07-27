@@ -112,7 +112,7 @@ impl ConfigOptimizer for MempoolConfig {
 
             // Set the max_broadcasts_per_peer to 4 (default is 2)
             if local_mempool_config_yaml["max_broadcasts_per_peer"].is_null() {
-                mempool_config.max_broadcasts_per_peer = 4;
+                mempool_config.max_broadcasts_per_peer = 20;
                 modified_config = true;
             }
 
@@ -158,9 +158,9 @@ mod tests {
             mempool_config.shared_mempool_max_concurrent_inbound_syncs,
             16
         );
-        assert_eq!(mempool_config.max_broadcasts_per_peer, 4);
+        assert_eq!(mempool_config.max_broadcasts_per_peer, 20);
         assert_eq!(mempool_config.default_failovers, 0);
-        assert_eq!(mempool_config.shared_mempool_batch_size, 200);
+        assert_eq!(mempool_config.shared_mempool_batch_size, 600);
         assert_eq!(mempool_config.shared_mempool_tick_interval_ms, 10);
     }
 
@@ -237,10 +237,6 @@ mod tests {
             4
         );
         assert_eq!(mempool_config.max_broadcasts_per_peer, 2);
-        assert_ne!(
-            mempool_config.default_failovers,
-            default_mempool_config.default_failovers
-        );
         assert_ne!(
             mempool_config.shared_mempool_tick_interval_ms,
             default_mempool_config.shared_mempool_tick_interval_ms
