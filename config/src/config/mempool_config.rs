@@ -110,7 +110,7 @@ impl ConfigOptimizer for MempoolConfig {
                 modified_config = true;
             }
 
-            // Set the max_broadcasts_per_peer to 4 (default is 2)
+            // Set the max_broadcasts_per_peer to 20 (default is 2)
             if local_mempool_config_yaml["max_broadcasts_per_peer"].is_null() {
                 mempool_config.max_broadcasts_per_peer = 20;
                 modified_config = true;
@@ -125,6 +125,13 @@ impl ConfigOptimizer for MempoolConfig {
             // Set the shared_mempool_tick_interval_ms to 10 (default is 50)
             if local_mempool_config_yaml["shared_mempool_tick_interval_ms"].is_null() {
                 mempool_config.shared_mempool_tick_interval_ms = 10;
+                modified_config = true;
+            }
+        }
+        if !node_type.is_validator() {
+            // Set the max_broadcasts_per_peer to 20 (default is 2)
+            if local_mempool_config_yaml["max_broadcasts_per_peer"].is_null() {
+                mempool_config.max_broadcasts_per_peer = 20;
                 modified_config = true;
             }
         }
