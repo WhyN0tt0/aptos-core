@@ -463,6 +463,24 @@ impl<
         let highest_known_ledger_info = self.get_highest_known_ledger_info()?;
         let highest_known_ledger_version = highest_known_ledger_info.ledger_info().version();
 
+        // If the node is fast syncing for the first time we
+        // need to wait until an epoch change is advertised.
+        let bootstrapping_mode = self.get_bootstrapping_mode();
+        if bootstrapping_mode == BootstrappingMode::DownloadLatestStates
+            && self
+                .driver_configuration
+                .config
+                .fast_sync_wait_for_epoch_change
+            && highest_synced_version == GENESIS_TRANSACTION_VERSION
+            && highest_known_ledger_version == GENESIS_TRANSACTION_VERSION
+        {
+            info!(LogSchema::new(LogEntry::Bootstrapper).message(&format!(
+                "Waiting for an epoch change to be advertised! Highest synced and advertised version is {}.",
+                highest_synced_version
+            )));
+            return Ok(());
+        }
+
         // If we've already synced to the highest known version, there's nothing to do
         if highest_synced_version >= highest_known_ledger_version {
             info!(LogSchema::new(LogEntry::Bootstrapper)
@@ -476,7 +494,7 @@ impl<
             highest_synced_version, highest_known_ledger_info, self.get_bootstrapping_mode())));
 
         // Bootstrap according to the mode
-        match self.get_bootstrapping_mode() {
+        match bootstrapping_mode {
             BootstrappingMode::DownloadLatestStates => {
                 self.fetch_missing_state_snapshot_data(
                     highest_synced_version,
