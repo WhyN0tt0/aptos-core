@@ -9,10 +9,7 @@ use aptos_forge::{
 };
 use aptos_logger::info;
 use rand::SeedableRng;
-use std::{
-    fmt::{self, Debug, Display},
-    time::Duration,
-};
+use std::{fmt::Debug, time::Duration};
 use tokio::runtime::Runtime;
 
 pub struct SingleRunStats {
@@ -37,8 +34,20 @@ impl Workloads {
 
     fn name(&self, index: usize) -> String {
         match self {
-            Self::TPS(tpss) => tpss[index].to_string(),
-            Self::TRANSACTIONS(workloads) => workloads[index].to_string(),
+            Self::TPS(tpss) => format!("TPS({})", tpss[index]),
+            Self::TRANSACTIONS(workloads) => format!("Workload({})", workloads[index].name()),
+        }
+    }
+
+    fn phase_name(&self, index: usize, phase: usize) -> String {
+        match self {
+            Self::TPS(_tpss) => unreachable!("TPS workload does not have phases"),
+            Self::TRANSACTIONS(workloads) => format!(
+                "Workload({}, phase={}, {})",
+                index,
+                phase,
+                workloads[index].phase_name(phase)
+            ),
         }
     }
 
@@ -63,8 +72,6 @@ impl TransactionWorkload {
             TransactionTypeArg::AccountGenerationLargePool.materialize(1, false);
 
         if self.unique_senders {
-            request.transaction_type(self.transaction_type.materialize(self.num_modules, false))
-        } else {
             let write_type = self.transaction_type.materialize(self.num_modules, true);
             request.transaction_mix_per_phase(vec![
                 // warmup
@@ -74,13 +81,39 @@ impl TransactionWorkload {
                 // cooldown
                 vec![(write_type, 1)],
             ])
+        } else {
+            request.transaction_type(self.transaction_type.materialize(self.num_modules, false))
         }
     }
-}
 
-impl Display for TransactionWorkload {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Debug::fmt(self, f)
+    fn name(&self) -> String {
+        // assert!(!self.unique_senders);
+        format!(
+            "{:?}{}",
+            self.transaction_type,
+            if self.num_modules > 1 {
+                format!("({} modules)", self.num_modules)
+            } else {
+                "".to_string()
+            }
+        )
+    }
+
+    fn phase_name(&self, phase: usize) -> String {
+        assert!(self.unique_senders);
+        format!(
+            "{:?}{}",
+            match phase {
+                0 => TransactionTypeArg::AccountGenerationLargePool,
+                1 => self.transaction_type,
+                _ => unreachable!(),
+            },
+            if self.num_modules > 1 {
+                format!("({} modules)", self.num_modules)
+            } else {
+                "".to_string()
+            }
+        )
     }
 }
 
@@ -119,10 +152,10 @@ impl LoadVsPerfBenchmark {
 
         let mut result = vec![];
         let phased = stats_by_phase.len() > 1;
-        for (i, phase_stats) in stats_by_phase.into_iter().enumerate() {
+        for (phase, phase_stats) in stats_by_phase.into_iter().enumerate() {
             result.push(SingleRunStats {
                 name: if phased {
-                    format!("{}_phase_{}", workloads.name(index), i)
+                    workloads.phase_name(index, phase)
                 } else {
                     workloads.name(index)
                 },
@@ -161,12 +194,7 @@ impl NetworkTest for LoadVsPerfBenchmark {
             }
 
             info!("Starting for {}", self.workloads.name(index));
-            results.append(&mut self.evaluate_single(
-                ctx,
-                &self.workloads,
-                index,
-                individual_duration,
-            )?);
+            results.push(self.evaluate_single(ctx, &self.workloads, index, individual_duration)?);
 
             // Note: uncomment below to perform reconfig during a test
             // let mut aptos_info = ctx.swarm().aptos_public_info();
@@ -183,13 +211,15 @@ impl NetworkTest for LoadVsPerfBenchmark {
             ctx.report.report_text(line);
         }
         for (index, result) in results.iter().enumerate() {
-            let rate = result.stats.rate();
+            // always take last phase for success criteria
+            let target_result = &result[result.len() - 1];
+            let rate = target_result.stats.rate();
             if let Some(criteria) = self.criteria.get(index) {
                 SuccessCriteriaChecker::check_core_for_success(
                     criteria,
                     ctx.report,
                     &rate,
-                    Some(result.name.clone()),
+                    Some(target_result.name.clone()),
                 )?;
             }
         }
@@ -197,10 +227,10 @@ impl NetworkTest for LoadVsPerfBenchmark {
     }
 }
 
-fn to_table(results: &[SingleRunStats]) -> Vec<String> {
+fn to_table(results: &[Vec<SingleRunStats>]) -> Vec<String> {
     let mut table = Vec::new();
     table.push(format!(
-        "{: <30} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12}",
+        "{: <40} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12}",
         "workload",
         "submitted/s",
         "committed/s",
@@ -214,22 +244,24 @@ fn to_table(results: &[SingleRunStats]) -> Vec<String> {
         "actual dur"
     ));
 
-    for result in results {
-        let rate = result.stats.rate();
-        table.push(format!(
-            "{: <30} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12}",
-            result.name,
-            rate.submitted,
-            rate.committed,
-            rate.expired,
-            rate.failed_submission,
-            result.ledger_transactions / result.actual_duration.as_secs(),
-            rate.latency,
-            rate.p50_latency,
-            rate.p90_latency,
-            rate.p99_latency,
-            result.actual_duration.as_secs()
-        ));
+    for run_results in results {
+        for result in run_results {
+            let rate = result.stats.rate();
+            table.push(format!(
+                "{: <40} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12}",
+                result.name,
+                rate.submitted,
+                rate.committed,
+                rate.expired,
+                rate.failed_submission,
+                result.ledger_transactions / result.actual_duration.as_secs(),
+                rate.latency,
+                rate.p50_latency,
+                rate.p90_latency,
+                rate.p99_latency,
+                result.actual_duration.as_secs()
+            ));
+        }
     }
 
     table
