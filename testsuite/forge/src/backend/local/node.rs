@@ -2,7 +2,9 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{FullNode, HealthCheckError, LocalVersion, Node, NodeExt, Validator, Version};
+use crate::{
+    FullNode, HealthCheckError, LocalVersion, Node, NodeCountersResult, NodeExt, Validator, Version,
+};
 use anyhow::{anyhow, ensure, Context, Result};
 use aptos_config::{config::NodeConfig, keys::ConfigKey};
 use aptos_db::{LEDGER_DB_NAME, STATE_MERKLE_DB_NAME};
@@ -334,13 +336,8 @@ impl Node for LocalNode {
         self.health_check().await
     }
 
-    fn counter(&self, _counter: &str, _port: u64) -> Result<f64> {
+    async fn counters(&self) -> Result<Box<dyn NodeCountersResult>> {
         todo!()
-    }
-
-    // local node does not need to expose metric end point
-    fn expose_metric(&self) -> Result<u64> {
-        Ok(0)
     }
 }
 

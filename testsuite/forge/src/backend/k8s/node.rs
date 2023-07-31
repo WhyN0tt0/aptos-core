@@ -4,8 +4,8 @@
 
 use crate::{
     backend::k8s::stateful_set, get_free_port, scale_stateful_set_replicas, FullNode,
-    HealthCheckError, Node, NodeExt, Result, Validator, Version, KUBECTL_BIN, LOCALHOST,
-    NODE_METRIC_PORT, REST_API_HAPROXY_SERVICE_PORT, REST_API_SERVICE_PORT,
+    HealthCheckError, Node, NodeCountersResult, NodeExt, Result, Validator, Version, KUBECTL_BIN,
+    LOCALHOST, NODE_METRIC_PORT, REST_API_HAPROXY_SERVICE_PORT, REST_API_SERVICE_PORT,
 };
 use anyhow::{anyhow, format_err};
 use aptos_config::config::NodeConfig;
@@ -20,6 +20,7 @@ use std::{
     fmt::{Debug, Formatter},
     process::{Command, Stdio},
     str::FromStr,
+    sync::atomic::{AtomicU32, Ordering},
     thread,
     time::{Duration, Instant},
 };
@@ -39,6 +40,8 @@ pub struct K8sNode {
     pub haproxy_enabled: bool,
     // whether we should try using port-forward on the Service to reach this node
     pub port_forward_enabled: bool,
+
+    pub(crate) counter_port: AtomicU32,
 }
 
 impl K8sNode {
@@ -206,34 +209,19 @@ impl Node for K8sNode {
     }
 
     // TODO: replace this with prometheus query?
-    fn counter(&self, counter: &str, port: u64) -> Result<f64> {
-        let response: Value =
-            reqwest::blocking::get(format!("http://{}:{}/counters", LOCALHOST, port))?.json()?;
-        if let Value::Number(ref response) = response[counter] {
-            if let Some(response) = response.as_f64() {
-                Ok(response)
-            } else {
-                Err(format_err!(
-                    "Failed to parse counter({}) as f64: {:?}",
-                    counter,
-                    response
-                ))
-            }
-        } else {
-            Err(format_err!(
-                "Counter({}) was not a Value::Number: {:?}",
-                counter,
-                response[counter]
-            ))
+    async fn counters(&self) -> Result<Box<dyn NodeCountersResult>> {
+        let mut port = self.counter_port.load(Ordering::Relaxed);
+        if port == 0 {
+            port = get_free_port();
+            assert!(port > 0);
+            self.port_forward(port, NODE_METRIC_PORT)?;
+            self.counter_port.store(port, Ordering::Relaxed);
         }
-    }
-
-    // TODO: verify this still works
-    fn expose_metric(&self) -> Result<u64> {
-        let port = get_free_port();
-        self.port_forward(port, NODE_METRIC_PORT)?;
-
-        Ok(port as u64)
+        let response: Value = reqwest::get(format!("http://{}:{}/counters", LOCALHOST, port))
+            .await?
+            .json()
+            .await?;
+        Ok(Box::new(K8sNodeCountersResult { counters: response }))
     }
 
     async fn health_check(&mut self) -> Result<(), HealthCheckError> {
@@ -267,6 +255,36 @@ impl Node for K8sNode {
             k8s_secret_name.as_str(),
         )
         .await
+    }
+}
+
+struct K8sNodeCountersResult {
+    counters: Value,
+}
+
+impl NodeCountersResult for K8sNodeCountersResult {
+    fn get(&self, counter: &str) -> Result<f64> {
+        if let Value::Number(ref response) = self.counters[counter] {
+            if let Some(response) = response.as_f64() {
+                Ok(response)
+            } else {
+                Err(format_err!(
+                    "Failed to parse counter({}) as f64: {:?}",
+                    counter,
+                    response
+                ))
+            }
+        } else {
+            Err(format_err!(
+                "Counter({}) was not a Value::Number: {:?}",
+                counter,
+                self.counters[counter]
+            ))
+        }
+    }
+
+    fn get_json(&self, counter: &str) -> &Value {
+        &self.counters[counter]
     }
 }
 

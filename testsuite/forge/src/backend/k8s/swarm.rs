@@ -35,7 +35,7 @@ use std::{
     collections::{BTreeMap, HashMap, HashSet},
     convert::TryFrom,
     env, str,
-    sync::Arc,
+    sync::{atomic::AtomicU32, Arc},
 };
 use tokio::{runtime::Runtime, time::Duration};
 
@@ -548,6 +548,7 @@ fn get_k8s_node_from_stateful_set(
         namespace: namespace.to_string(),
         haproxy_enabled: enable_haproxy,
         port_forward_enabled: use_port_forward,
+        counter_port: AtomicU32::new(0),
     }
 }
 

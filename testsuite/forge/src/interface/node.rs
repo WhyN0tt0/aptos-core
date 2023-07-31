@@ -8,6 +8,7 @@ use aptos_config::{config::NodeConfig, network_id::NetworkId};
 use aptos_inspection_service::inspection_client::InspectionClient;
 use aptos_rest_client::{AptosBaseUrl, Client as RestClient};
 use aptos_sdk::types::PeerId;
+use serde_json::Value;
 use std::{
     collections::HashMap,
     time::{Duration, Instant},
@@ -69,9 +70,13 @@ pub trait Node: Send + Sync {
 
     async fn health_check(&mut self) -> Result<(), HealthCheckError>;
 
-    fn counter(&self, counter: &str, port: u64) -> Result<f64>;
+    async fn counters(&self) -> Result<Box<dyn NodeCountersResult>>;
+}
 
-    fn expose_metric(&self) -> Result<u64>;
+pub trait NodeCountersResult {
+    fn get(&self, counter: &str) -> Result<f64>;
+
+    fn get_json(&self, counter: &str) -> &Value;
 }
 
 /// Trait used to represent a running Validator

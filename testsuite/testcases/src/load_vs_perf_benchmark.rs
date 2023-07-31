@@ -106,34 +106,30 @@ impl LoadVsPerfBenchmark {
     ) -> Result<Vec<SingleRunStats>> {
         let rng = SeedableRng::from_rng(ctx.core().rng())?;
         let emit_job_request = workloads.configure(index, ctx.emit_job.clone());
-        let (stats, actual_duration, ledger_transactions, stats_by_phase) =
-            self.test.network_load_test(
-                ctx,
-                emit_job_request,
-                duration,
-                // add larger warmup, as when we are exceeding the max load,
-                // it takes more time to fill mempool.
-                0.2,
-                0.05,
-                rng,
-            )?;
+        let (_stats, _actual_duration, stats_by_phase) = self.test.network_load_test(
+            ctx,
+            emit_job_request,
+            duration,
+            // add larger warmup, as when we are exceeding the max load,
+            // it takes more time to fill mempool.
+            0.2,
+            0.05,
+            rng,
+        )?;
 
-        let mut result = vec![SingleRunStats {
-            name: workloads.name(index),
-            stats,
-            ledger_transactions,
-            actual_duration,
-        }];
-
-        if stats_by_phase.len() > 1 {
-            for (i, (phase_stats, phase_duration)) in stats_by_phase.into_iter().enumerate() {
-                result.push(SingleRunStats {
-                    name: format!("{}_phase_{}", workloads.name(index), i),
-                    stats: phase_stats,
-                    ledger_transactions,
-                    actual_duration: phase_duration,
-                });
-            }
+        let mut result = vec![];
+        let phased = stats_by_phase.len() > 1;
+        for (i, phase_stats) in stats_by_phase.into_iter().enumerate() {
+            result.push(SingleRunStats {
+                name: if phased {
+                    format!("{}_phase_{}", workloads.name(index), i)
+                } else {
+                    workloads.name(index)
+                },
+                stats: phase_stats.emitter_stats,
+                ledger_transactions: phase_stats.ledger_transactions,
+                actual_duration: phase_stats.actual_duration,
+            });
         }
 
         Ok(result)

@@ -27,10 +27,11 @@ pub mod validator_reboot_stress_test;
 
 use anyhow::Context;
 use aptos_forge::{
-    EmitJobRequest, NetworkContext, NetworkTest, NodeExt, Result, Swarm, SwarmExt, Test,
-    TestReport, TxnEmitter, TxnStats, Version,
+    EmitJobRequest, NetworkContext, NetworkTest, NodeCountersResult, NodeExt, Result, Swarm,
+    SwarmExt, Test, TestReport, TxnEmitter, TxnStats, Version,
 };
 use aptos_logger::info;
+use aptos_rest_client::Client as RestClient;
 use aptos_sdk::{transaction_builder::TransactionFactory, types::PeerId};
 use futures::future::join_all;
 use rand::{rngs::StdRng, SeedableRng};
@@ -171,15 +172,14 @@ impl NetworkTest for dyn NetworkLoadTest {
         let emit_job_request = ctx.emit_job.clone();
         let rng = SeedableRng::from_rng(ctx.core().rng())?;
         let duration = ctx.global_duration;
-        let (txn_stat, actual_test_duration, _ledger_transactions, _stats_by_phase) = self
-            .network_load_test(
-                ctx,
-                emit_job_request,
-                duration,
-                WARMUP_DURATION_FRACTION,
-                COOLDOWN_DURATION_FRACTION,
-                rng,
-            )?;
+        let (txn_stat, actual_test_duration, _stats_by_phase) = self.network_load_test(
+            ctx,
+            emit_job_request,
+            duration,
+            WARMUP_DURATION_FRACTION,
+            COOLDOWN_DURATION_FRACTION,
+            rng,
+        )?;
         ctx.report
             .report_txn_stats(self.name().to_string(), &txn_stat);
 
@@ -217,7 +217,7 @@ impl dyn NetworkLoadTest {
         warmup_duration_fraction: f32,
         cooldown_duration_fraction: f32,
         rng: StdRng,
-    ) -> Result<(TxnStats, Duration, u64, Vec<(TxnStats, Duration)>)> {
+    ) -> Result<(TxnStats, Duration, Vec<LoadTestPhaseStats>)> {
         let destination = self.setup(ctx).context("setup NetworkLoadTest")?;
         let nodes_to_send_load_to = destination.get_destination_nodes(ctx.swarm());
 
@@ -255,19 +255,11 @@ impl dyn NetworkLoadTest {
         job = rt.block_on(job.periodic_stat_forward(warmup_duration, 60));
         info!("{}s warmup finished", warmup_duration.as_secs());
 
-        let max_start_ledger_transactions = rt
-            .block_on(join_all(
-                clients.iter().map(|client| client.get_ledger_information()),
-            ))
-            .into_iter()
-            .filter(|r| r.is_ok())
-            .map(|r| r.unwrap().into_inner())
-            .map(|s| s.version - 2 * s.block_height)
-            .max();
-
         let mut actual_phase_durations = Vec::new();
+        let mut phase_start_network_state = Vec::new();
         let test_start = Instant::now();
         for i in 0..stats_tracking_phases - 2 {
+            phase_start_network_state.push(rt.block_on(NetworkState::new(ctx, &clients)));
             job.start_next_phase();
 
             if i > 0 {
@@ -292,17 +284,9 @@ impl dyn NetworkLoadTest {
             actual_test_duration.as_secs()
         );
 
+        phase_start_network_state.push(rt.block_on(NetworkState::new(ctx, &clients)));
         job.start_next_phase();
         let cooldown_start = Instant::now();
-        let max_end_ledger_transactions = rt
-            .block_on(join_all(
-                clients.iter().map(|client| client.get_ledger_information()),
-            ))
-            .into_iter()
-            .filter(|r| r.is_ok())
-            .map(|r| r.unwrap().into_inner())
-            .map(|s| s.version - 2 * s.block_height)
-            .max();
 
         let cooldown_used = cooldown_start.elapsed();
         if cooldown_used < cooldown_duration {
@@ -320,21 +304,72 @@ impl dyn NetworkLoadTest {
         info!("Warmup stats: {}", stats_by_phase[0].rate());
 
         let mut stats: Option<TxnStats> = None;
-        let mut stats_and_duration_by_phase_filtered = Vec::new();
+        let mut stats_by_phase_filtered = Vec::new();
         for i in 0..stats_tracking_phases - 2 {
-            let cur = &stats_by_phase[1 + i];
+            let next_i = i + 1;
+            let cur = &stats_by_phase[next_i];
             info!("Test stats [test phase {}]: {}", i, cur.rate());
             stats = if let Some(previous) = stats {
                 Some(&previous + cur)
             } else {
                 Some(cur.clone())
             };
-            stats_and_duration_by_phase_filtered.push((cur.clone(), actual_phase_durations[i]));
+            stats_by_phase_filtered.push(LoadTestPhaseStats::create_from_diff(
+                cur.clone(),
+                actual_phase_durations[i],
+                &phase_start_network_state[i],
+                &phase_start_network_state[next_i],
+            ));
         }
         info!("Cooldown stats: {}", stats_by_phase.last().unwrap().rate());
 
-        let ledger_transactions = if let Some(end_t) = max_end_ledger_transactions {
-            if let Some(start_t) = max_start_ledger_transactions {
+        Ok((
+            stats.unwrap(),
+            actual_test_duration,
+            stats_by_phase_filtered,
+        ))
+    }
+}
+
+pub(crate) struct NetworkState {
+    max_ledger_transactions: Option<u64>,
+    counters: Vec<Result<Box<dyn NodeCountersResult>>>,
+}
+
+impl NetworkState {
+    pub async fn new(ctx: &mut NetworkContext<'_>, clients: &[RestClient]) -> NetworkState {
+        let max_ledger_transactions =
+            join_all(clients.iter().map(|client| client.get_ledger_information()))
+                .await
+                .into_iter()
+                .filter(|r| r.is_ok())
+                .map(|r| r.unwrap().into_inner())
+                .map(|s| s.version - 2 * s.block_height)
+                .max();
+        let counters = join_all(ctx.swarm().validators().map(|v| v.counters())).await;
+
+        NetworkState {
+            max_ledger_transactions,
+            counters,
+        }
+    }
+}
+
+pub struct LoadTestPhaseStats {
+    pub emitter_stats: TxnStats,
+    pub actual_duration: Duration,
+    pub ledger_transactions: u64,
+}
+
+impl LoadTestPhaseStats {
+    pub(crate) fn create_from_diff(
+        emitter_stats: TxnStats,
+        actual_duration: Duration,
+        start_state: &NetworkState,
+        end_state: &NetworkState,
+    ) -> LoadTestPhaseStats {
+        let ledger_transactions = if let Some(end_t) = end_state.max_ledger_transactions {
+            if let Some(start_t) = start_state.max_ledger_transactions {
                 end_t - start_t
             } else {
                 0
@@ -343,12 +378,34 @@ impl dyn NetworkLoadTest {
             0
         };
 
-        Ok((
-            stats.unwrap(),
-            actual_test_duration,
+        start_state.counters.iter().for_each(|start| {
+            info!(
+                "start counters: {:?}",
+                start.as_ref().map(|v| format!(
+                    "aptos_consensus_block_tracing_sum: {}",
+                    v.get_json("aptos_consensus_block_tracing_sum"),
+                ))
+            )
+        });
+
+        // .zip(end_state.counters.iter())
+        // .filter(|(start, end)| start.is_ok() && end.is_ok())
+        // .for_each(|(start, end)| {
+        //     let start = start.as_ref().unwrap();
+        //     let end = end.as_ref().unwrap();
+
+        //     info!(
+        //         "aptos_consensus_block_tracing_sum: from {} to {}",
+        //         start.get_json("aptos_consensus_block_tracing_sum"),
+        //         end.get_json("aptos_consensus_block_tracing_sum")
+        //     );
+        // });
+
+        LoadTestPhaseStats {
+            emitter_stats,
+            actual_duration,
             ledger_transactions,
-            stats_and_duration_by_phase_filtered,
-        ))
+        }
     }
 }
 
