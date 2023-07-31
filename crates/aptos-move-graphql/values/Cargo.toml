@@ -1,0 +1,26 @@
+[package]
+name = "aptos-move-graphql-values"
+description = "Library to convert Move values to GraphQL schema compliant values"
+version = "0.0.1"
+
+# Workspace inherited keys
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+publish = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+anyhow = { workspace = true }
+async-graphql = { workspace = true }
+move-core-types = { workspace = true }
+move-resource-viewer = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+aptos-framework = { workspace = true }
+aptos-move-graphql-test-helpers = { workspace = true }
+tokio = { workspace = true }
+url = { workspace = true }

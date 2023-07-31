@@ -6,6 +6,7 @@ pub mod coverage;
 mod disassembler;
 mod manifest;
 pub mod package_hooks;
+mod schema;
 mod show;
 pub mod stored_package;
 mod transactional_tests_runner;
@@ -94,6 +95,7 @@ pub enum MoveTool {
     Publish(PublishPackage),
     Run(RunFunction),
     RunScript(RunScript),
+    GenerateSchema(schema::GenerateSchema),
     #[clap(subcommand, hide = true)]
     Show(show::ShowTool),
     Test(TestPackage),
@@ -122,6 +124,7 @@ impl MoveTool {
             MoveTool::Publish(tool) => tool.execute_serialized().await,
             MoveTool::Run(tool) => tool.execute_serialized().await,
             MoveTool::RunScript(tool) => tool.execute_serialized().await,
+            MoveTool::GenerateSchema(tool) => tool.execute_serialized().await,
             MoveTool::Show(tool) => tool.execute_serialized().await,
             MoveTool::Test(tool) => tool.execute_serialized().await,
             MoveTool::TransactionalTest(tool) => tool.execute_serialized_success().await,

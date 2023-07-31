@@ -66,6 +66,9 @@ members = [
     "crates/aptos-log-derive",
     "crates/aptos-logger",
     "crates/aptos-metrics-core",
+    "crates/aptos-move-graphql/schema",
+    "crates/aptos-move-graphql/test-helpers",
+    "crates/aptos-move-graphql/values",
     "crates/aptos-network-checker",
     "crates/aptos-node-identity",
     "crates/aptos-openapi",
@@ -260,6 +263,9 @@ aptos = { path = "crates/aptos" }
 aptos-accumulator = { path = "storage/accumulator" }
 aptos-aggregator = { path = "aptos-move/aptos-aggregator" }
 aptos-api = { path = "api" }
+aptos-move-graphql-test-helpers = { path = "crates/aptos-move-graphql/test-helpers" }
+aptos-move-graphql-schema = { path = "crates/aptos-move-graphql/schema" }
+aptos-move-graphql-values = { path = "crates/aptos-move-graphql/values" }
 aptos-api-test-context = { path = "api/test-context" }
 aptos-api-types = { path = "api/types" }
 aptos-backup-cli = { path = "storage/backup/backup-cli" }
@@ -407,6 +413,10 @@ aptos-writeset-generator = { path = "aptos-move/writeset-transaction-generator" 
 # Please do not add any test features here: they should be declared by the individual crate.
 again = "0.1.2"
 anyhow = "1.0.71"
+#async-graphql = { version = "6.0.0", features = ["dynamic-schema"] }
+#async-graphql-poem = "6.0.0"
+async-graphql = { git = "https://github.com/banool/async-graphql.git", branch = "master", features = ["dynamic-schema"] }
+async-graphql-poem = { git = "https://github.com/banool/async-graphql.git", branch = "master" }
 anstyle = "1.0.1"
 arc-swap = "1.6.0"
 arr_macro = "0.2.1"
@@ -419,7 +429,7 @@ assert_approx_eq = "1.1.0"
 assert_unordered = "0.3.5"
 async-stream = "0.3"
 async-trait = "0.1.53"
-axum = "0.5.16"
+axum = "0.6.11"
 base64 = "0.13.0"
 backoff = { version = "0.4.0", features = ["tokio"] }
 backtrace = "0.3.58"
@@ -542,8 +552,8 @@ prometheus-http-query = "0.5.2"
 prometheus-parse = "0.2.4"
 proptest = "1.0.0"
 proptest-derive = "0.3.0"
-prost = "0.11.3"
-prost-types = "0.11.3"
+prost = "0.11.8"
+prost-types = "0.11.8"
 quanta = "0.10.1"
 quote = "1.0.18"
 rand = "0.7.3"
