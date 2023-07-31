@@ -69,6 +69,7 @@ members = [
     "crates/aptos-move-graphql/schema",
     "crates/aptos-move-graphql/test-helpers",
     "crates/aptos-move-graphql/values",
+    "crates/aptos-move-graphql/scalars",
     "crates/aptos-network-checker",
     "crates/aptos-node-identity",
     "crates/aptos-openapi",
@@ -266,6 +267,7 @@ aptos-api = { path = "api" }
 aptos-move-graphql-test-helpers = { path = "crates/aptos-move-graphql/test-helpers" }
 aptos-move-graphql-schema = { path = "crates/aptos-move-graphql/schema" }
 aptos-move-graphql-values = { path = "crates/aptos-move-graphql/values" }
+aptos-move-graphql-scalars = { path = "crates/aptos-move-graphql/scalars" }
 aptos-api-test-context = { path = "api/test-context" }
 aptos-api-types = { path = "api/types" }
 aptos-backup-cli = { path = "storage/backup/backup-cli" }
