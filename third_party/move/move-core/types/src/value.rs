@@ -89,6 +89,14 @@ pub enum MoveStructLayout {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(arbitrary::Arbitrary))]
+pub enum LayoutTag {
+    /// The current type is corresponds to an aggregator or a snapshot values
+    /// and requires special handling in serialization and deserialization.
+    AggregatorLifting,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(arbitrary::Arbitrary))]
 pub enum MoveTypeLayout {
     #[serde(rename(serialize = "bool", deserialize = "bool"))]
     Bool,
@@ -115,9 +123,7 @@ pub enum MoveTypeLayout {
     #[serde(rename(serialize = "u256", deserialize = "u256"))]
     U256,
 
-    // Special marker which allows annotating aggregatable types.
-    // In the future, we might want to support different markings.
-    Aggregatable(Box<MoveTypeLayout>),
+    Tagged(LayoutTag, Box<MoveTypeLayout>),
 }
 
 impl MoveValue {
@@ -332,7 +338,11 @@ impl<'d> serde::de::DeserializeSeed<'d> for &MoveTypeLayout {
             MoveTypeLayout::Vector(layout) => Ok(MoveValue::Vector(
                 deserializer.deserialize_seq(VectorElementVisitor(layout))?,
             )),
-            MoveTypeLayout::Aggregatable(layout) => layout.deserialize(deserializer),
+            MoveTypeLayout::Tagged(tag, layout) => match tag {
+                // Serialization ignores the tag for types which correspond to aggregator or
+                // snapshot values.
+                LayoutTag::AggregatorLifting => layout.deserialize(deserializer),
+            },
         }
     }
 }
@@ -534,7 +544,9 @@ impl fmt::Display for MoveTypeLayout {
             Vector(typ) => write!(f, "vector<{}>", typ),
             Struct(s) => write!(f, "{}", s),
             Signer => write!(f, "signer"),
-            Aggregatable(typ) => write!(f, "{}", typ),
+            Tagged(tag, typ) => match tag {
+                LayoutTag::AggregatorLifting => write!(f, "{}", typ),
+            },
         }
     }
 }
@@ -581,7 +593,9 @@ impl TryInto<TypeTag> for &MoveTypeLayout {
             MoveTypeLayout::Signer => TypeTag::Signer,
             MoveTypeLayout::Vector(v) => TypeTag::Vector(Box::new(v.as_ref().try_into()?)),
             MoveTypeLayout::Struct(v) => TypeTag::Struct(Box::new(v.try_into()?)),
-            MoveTypeLayout::Aggregatable(v) => v.as_ref().try_into()?,
+            MoveTypeLayout::Tagged(tag, v) => match tag {
+                LayoutTag::AggregatorLifting => v.as_ref().try_into()?,
+            },
         })
     }
 }

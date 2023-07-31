@@ -41,7 +41,7 @@ use move_core_types::{
     ident_str,
     identifier::{IdentStr, Identifier},
     language_storage::{ModuleId, StructTag, TypeTag},
-    value::{MoveStructLayout, MoveTypeLayout},
+    value::{LayoutTag, MoveStructLayout, MoveTypeLayout},
 };
 use move_resource_viewer::MoveValueAnnotator;
 use serde_json::Value;
@@ -803,8 +803,10 @@ impl<'a, R: MoveResolverExt + ?Sized> MoveConverter<'a, R> {
             MoveTypeLayout::Signer => {
                 bail!("unexpected move type {:?} for value {:?}", layout, val)
             },
-            MoveTypeLayout::Aggregatable(inner_layout) => {
-                self.try_into_vm_value_from_layout(inner_layout, val)?
+            MoveTypeLayout::Tagged(tag, inner_layout) => match tag {
+                LayoutTag::AggregatorLifting => {
+                    self.try_into_vm_value_from_layout(inner_layout, val)?
+                },
             },
         })
     }

@@ -12,7 +12,7 @@ use move_core_types::{
     account_address::AccountAddress,
     language_storage::TypeTag,
     u256,
-    value::{MoveFieldLayout, MoveStructLayout, MoveTypeLayout},
+    value::{LayoutTag, MoveFieldLayout, MoveStructLayout, MoveTypeLayout},
 };
 use move_vm_runtime::native_functions::NativeFunction;
 use move_vm_types::{
@@ -285,8 +285,8 @@ fn native_format_impl(
             )?;
             out.push('}');
         },
-        MoveTypeLayout::Aggregatable(ty) => {
-            native_format_impl(context, ty, val, depth, out)?;
+        MoveTypeLayout::Tagged(tag, ty) => match tag {
+            LayoutTag::AggregatorLifting => native_format_impl(context, ty, val, depth, out)?,
         },
     };
     if context.include_int_type {

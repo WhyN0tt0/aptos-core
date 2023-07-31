@@ -28,7 +28,7 @@ use move_core_types::{
     ident_str,
     identifier::{IdentStr, Identifier},
     language_storage::{ModuleId, StructTag, TypeTag},
-    value::{MoveFieldLayout, MoveStructLayout, MoveTypeLayout},
+    value::{LayoutTag, MoveFieldLayout, MoveStructLayout, MoveTypeLayout},
     vm_status::StatusCode,
 };
 use move_vm_types::loaded_data::runtime_types::{
@@ -2828,7 +2828,7 @@ impl Loader {
         gidx: CachedStructIndex,
         ty_args: &[Type],
         count: &mut u64,
-        marked: &mut bool,
+        has_aggregator_lifting: &mut bool,
         depth: u64,
     ) -> PartialVMResult<MoveStructLayout> {
         if let Some(struct_map) = self.type_cache.read().structs.get(&gidx) {
@@ -2845,9 +2845,12 @@ impl Loader {
         let count_before = *count;
         let struct_type = self.module_cache.read().struct_at(gidx);
 
-        // Some types can have aggregatable fields.
-        // These are Aggregator and AggregatorSnapshot right now.
-        *marked |= self.is_aggregator_struct(gidx) || self.is_aggregator_snapshot_struct(gidx);
+        // Some types can have fields which are lifted at serialization or deserialization
+        // times. Right now these are Aggregator and AggregatorSnapshot.
+        let contains_lifting =
+            self.is_aggregator_struct(gidx) || self.is_aggregator_snapshot_struct(gidx);
+        *has_aggregator_lifting |= contains_lifting;
+        const LIFTED_IDENTIFIER_INDEX: usize = 0;
 
         let field_tys = struct_type
             .fields
@@ -2858,18 +2861,23 @@ impl Loader {
             .iter()
             .enumerate()
             .map(|(idx, ty)| {
-                // TODO(aggregator) Make 0 some const.
-                if *marked && idx == 0 {
-                    Ok(MoveTypeLayout::Aggregatable(Box::new(
-                        self.type_to_type_layout_impl(ty, count, marked, depth + 1)?,
-                    )))
+                if contains_lifting && idx == LIFTED_IDENTIFIER_INDEX {
+                    Ok(MoveTypeLayout::Tagged(
+                        LayoutTag::AggregatorLifting,
+                        Box::new(self.type_to_type_layout_impl(
+                            ty,
+                            count,
+                            has_aggregator_lifting,
+                            depth + 1,
+                        )?),
+                    ))
                 } else {
-                    self.type_to_type_layout_impl(ty, count, marked, depth + 1)
+                    self.type_to_type_layout_impl(ty, count, has_aggregator_lifting, depth + 1)
                 }
             })
             .collect::<PartialVMResult<Vec<_>>>()?;
-        let field_node_count = *count - count_before;
 
+        let field_node_count = *count - count_before;
         let struct_layout = MoveStructLayout::new(field_layouts);
 
         let mut cache = self.type_cache.write();
@@ -2914,7 +2922,7 @@ impl Loader {
         &self,
         ty: &Type,
         count: &mut u64,
-        marked: &mut bool,
+        has_aggregator_lifting: &mut bool,
         depth: u64,
     ) -> PartialVMResult<MoveTypeLayout> {
         if *count > MAX_TYPE_TO_LAYOUT_NODES {
@@ -2965,7 +2973,7 @@ impl Loader {
                 MoveTypeLayout::Vector(Box::new(self.type_to_type_layout_impl(
                     ty,
                     count,
-                    marked,
+                    has_aggregator_lifting,
                     depth + 1,
                 )?))
             },
@@ -2975,15 +2983,19 @@ impl Loader {
                     *gidx,
                     &[],
                     count,
-                    marked,
+                    has_aggregator_lifting,
                     depth,
                 )?)
             },
             Type::StructInstantiation(gidx, ty_args) => {
                 *count += 1;
-                MoveTypeLayout::Struct(
-                    self.struct_gidx_to_type_layout(*gidx, ty_args, count, marked, depth)?,
-                )
+                MoveTypeLayout::Struct(self.struct_gidx_to_type_layout(
+                    *gidx,
+                    ty_args,
+                    count,
+                    has_aggregator_lifting,
+                    depth,
+                )?)
             },
             Type::Reference(_) | Type::MutableReference(_) | Type::TyParam(_) => {
                 return Err(
@@ -3093,20 +3105,21 @@ impl Loader {
         self.type_to_type_tag_impl(ty)
     }
 
-    pub(crate) fn type_to_marked_type_layout(
+    pub(crate) fn type_to_type_layout_with_aggregator_lifting(
         &self,
         ty: &Type,
     ) -> PartialVMResult<(MoveTypeLayout, bool)> {
         let mut count = 0;
-        let mut marked = false;
-        let layout = self.type_to_type_layout_impl(ty, &mut count, &mut marked, 1)?;
-        Ok((layout, marked))
+        let mut has_aggregator_lifting = false;
+        let layout =
+            self.type_to_type_layout_impl(ty, &mut count, &mut has_aggregator_lifting, 1)?;
+        Ok((layout, has_aggregator_lifting))
     }
 
     pub(crate) fn type_to_type_layout(&self, ty: &Type) -> PartialVMResult<MoveTypeLayout> {
         let mut count = 0;
-        let mut marked = false;
-        self.type_to_type_layout_impl(ty, &mut count, &mut marked, 1)
+        let mut has_aggregator_lifting = false;
+        self.type_to_type_layout_impl(ty, &mut count, &mut has_aggregator_lifting, 1)
     }
 
     pub(crate) fn type_to_fully_annotated_layout(

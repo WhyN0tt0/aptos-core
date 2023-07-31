@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::values::{ExchangeError, ExchangeResult, Identifier, Struct, Value, ValueExchange};
-use move_core_types::value::{MoveStructLayout::Runtime, MoveTypeLayout};
+use move_core_types::value::{LayoutTag, MoveStructLayout::Runtime, MoveTypeLayout};
 use std::{cell::RefCell, collections::BTreeMap};
 
 #[cfg(test)]
@@ -49,8 +49,8 @@ fn test() {
 
     let layout = MoveTypeLayout::Struct(Runtime(vec![
         MoveTypeLayout::U64,
-        MoveTypeLayout::Aggregatable(Box::new(MoveTypeLayout::U128)),
-        MoveTypeLayout::Aggregatable(Box::new(MoveTypeLayout::U64)),
+        MoveTypeLayout::Tagged(LayoutTag::AggregatorLifting, Box::new(MoveTypeLayout::U128)),
+        MoveTypeLayout::Tagged(LayoutTag::AggregatorLifting, Box::new(MoveTypeLayout::U64)),
     ]));
 
     // Construct a blob, and then deserialize it, at the same time replacing

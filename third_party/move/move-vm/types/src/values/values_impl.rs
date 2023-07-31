@@ -3146,33 +3146,35 @@ impl<'e, 'l, 'v> serde::Serialize for AnnotatedValue<'e, 'l, 'v, MoveTypeLayout,
             },
 
             // Special case: aggregatable values.
-            (MoveTypeLayout::Aggregatable(layout), val) => {
-                match self.exchange {
-                    Some(exchange) => {
-                        // If values are supposed to be exchanged, first re-interpret
-                        // the current value as ID and then get the actual value.
-                        // Then continue with serialization on a new value.
-                        let id = val.try_as_identifier().map_err(serde::ser::Error::custom)?;
-                        let value = exchange
-                            .claim_value(id)
-                            .map_err(serde::ser::Error::custom)?;
-                        AnnotatedValue {
-                            exchange: self.exchange,
-                            layout: layout.as_ref(),
-                            val: &value.0,
-                        }
-                        .serialize(serializer)
-                    },
-                    None => {
-                        // If did not exchange values, simply continue with serialization.
-                        AnnotatedValue {
-                            exchange: self.exchange,
-                            layout: layout.as_ref(),
-                            val,
-                        }
-                        .serialize(serializer)
-                    },
-                }
+            (MoveTypeLayout::Tagged(tag, layout), val) => match tag {
+                LayoutTag::AggregatorLifting => {
+                    match self.exchange {
+                        Some(exchange) => {
+                            // If values are supposed to be exchanged, first re-interpret
+                            // the current value as ID and then get the actual value.
+                            // Then continue with serialization on a new value.
+                            let id = val.try_as_identifier().map_err(serde::ser::Error::custom)?;
+                            let value = exchange
+                                .claim_value(id)
+                                .map_err(serde::ser::Error::custom)?;
+                            AnnotatedValue {
+                                exchange: self.exchange,
+                                layout: layout.as_ref(),
+                                val: &value.0,
+                            }
+                            .serialize(serializer)
+                        },
+                        None => {
+                            // If did not exchange values, simply continue with serialization.
+                            AnnotatedValue {
+                                exchange: self.exchange,
+                                layout: layout.as_ref(),
+                                val,
+                            }
+                            .serialize(serializer)
+                        },
+                    }
+                },
             },
 
             (ty, val) => Err(invariant_violation::<S>(format!(
@@ -3261,26 +3263,28 @@ impl<'d, 'e> serde::de::DeserializeSeed<'d> for SeedWrapper<'e, &MoveTypeLayout>
             }),
 
             // Special case: aggregatable values.
-            L::Aggregatable(layout) => {
-                // First, deserialize the marked value. This can be
-                // done by inspecting the marked layout.
-                let value = SeedWrapper {
-                    exchange: self.exchange,
-                    layout: layout.as_ref(),
-                }
-                .deserialize(deserializer)?;
+            L::Tagged(tag, layout) => match tag {
+                LayoutTag::AggregatorLifting => {
+                    // First, deserialize the marked value. This can be
+                    // done by inspecting the marked layout.
+                    let value = SeedWrapper {
+                        exchange: self.exchange,
+                        layout: layout.as_ref(),
+                    }
+                    .deserialize(deserializer)?;
 
-                // Then check if value needs to be exchanged.
-                Ok(match self.exchange {
-                    Some(exchange) => {
-                        let id = exchange
-                            .record_value(value)
-                            .map_err(serde::de::Error::custom)?;
-                        id.try_into_value(layout.as_ref())
-                            .map_err(serde::de::Error::custom)?
-                    },
-                    None => value,
-                })
+                    // Then check if value needs to be exchanged.
+                    Ok(match self.exchange {
+                        Some(exchange) => {
+                            let id = exchange
+                                .record_value(value)
+                                .map_err(serde::de::Error::custom)?;
+                            id.try_into_value(layout.as_ref())
+                                .map_err(serde::de::Error::custom)?
+                        },
+                        None => value,
+                    })
+                },
             },
         }
     }
@@ -3757,7 +3761,9 @@ pub mod prop {
                 .prop_map(move |vals| Value::struct_(Struct::pack(vals)))
                 .boxed(),
 
-            L::Aggregatable(layout) => value_strategy_with_layout(layout.as_ref()),
+            L::Tagged(tag, layout) => match tag {
+                LayoutTag::AggregatorLifting => value_strategy_with_layout(layout.as_ref()),
+            },
         }
     }
 
@@ -3779,7 +3785,7 @@ pub mod prop {
         leaf.prop_recursive(8, 32, 2, |inner| {
             prop_oneof![
                 1 => inner.clone().prop_map(|layout| L::Vector(Box::new(layout))),
-                1 => inner.clone().prop_map(|layout| L::Aggregatable(Box::new(layout))),
+                1 => inner.clone().prop_map(|layout| L::Tagged(LayoutTag::AggregatorLifting, Box::new(layout))),
                 1 => vec(inner, 0..1).prop_map(|f_layouts| {
                      L::Struct(MoveStructLayout::new(f_layouts))}),
             ]
@@ -3794,14 +3800,14 @@ pub mod prop {
     }
 }
 
-use move_core_types::value::{MoveStruct, MoveValue};
+use move_core_types::value::{LayoutTag, MoveStruct, MoveValue};
 
 impl ValueImpl {
     pub fn as_move_value(&self, layout: &MoveTypeLayout) -> MoveValue {
         use MoveTypeLayout as L;
 
         // Make sure to strip all marks from the type layout.
-        if let L::Aggregatable(layout) = layout {
+        if let L::Tagged(LayoutTag::AggregatorLifting, layout) = layout {
             return self.as_move_value(layout.as_ref());
         }
 
