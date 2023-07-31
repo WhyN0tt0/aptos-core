@@ -193,7 +193,8 @@ pub fn move_type_to_field_type(field_type: &MoveType, blah: bool) -> Result<Type
                 Ok(TypeRefInner::NonNull(Box::new(TypeRefInner::Named(
                     TypeRef::STRING.into(),
                 ))))
-            } /*
+            }
+            /*
             // Commenting out the handling of Option for now because the API doesn't
             // return data in this way either yet, so if I want to use this tool now
             // I can't have this behavior enabled.

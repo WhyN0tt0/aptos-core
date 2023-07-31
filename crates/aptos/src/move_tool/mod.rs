@@ -4,9 +4,9 @@
 mod aptos_debug_natives;
 pub mod coverage;
 mod disassembler;
+mod generate;
 mod manifest;
 pub mod package_hooks;
-mod schema;
 mod show;
 pub mod stored_package;
 mod transactional_tests_runner;
@@ -89,13 +89,14 @@ pub enum MoveTool {
     Disassemble(Disassemble),
     Document(DocumentPackage),
     Download(DownloadPackage),
+    #[clap(subcommand)]
+    Generate(generate::GenerateTool),
     Init(InitPackage),
     List(ListPackage),
     Prove(ProvePackage),
     Publish(PublishPackage),
     Run(RunFunction),
     RunScript(RunScript),
-    GenerateSchema(schema::GenerateSchema),
     #[clap(subcommand, hide = true)]
     Show(show::ShowTool),
     Test(TestPackage),
@@ -118,13 +119,13 @@ impl MoveTool {
             MoveTool::Disassemble(tool) => tool.execute_serialized().await,
             MoveTool::Document(tool) => tool.execute_serialized().await,
             MoveTool::Download(tool) => tool.execute_serialized().await,
+            MoveTool::Generate(tool) => tool.execute().await,
             MoveTool::Init(tool) => tool.execute_serialized_success().await,
             MoveTool::List(tool) => tool.execute_serialized().await,
             MoveTool::Prove(tool) => tool.execute_serialized().await,
             MoveTool::Publish(tool) => tool.execute_serialized().await,
             MoveTool::Run(tool) => tool.execute_serialized().await,
             MoveTool::RunScript(tool) => tool.execute_serialized().await,
-            MoveTool::GenerateSchema(tool) => tool.execute_serialized().await,
             MoveTool::Show(tool) => tool.execute_serialized().await,
             MoveTool::Test(tool) => tool.execute_serialized().await,
             MoveTool::TransactionalTest(tool) => tool.execute_serialized_success().await,

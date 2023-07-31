@@ -13,6 +13,7 @@ repository = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+async-graphql-reverse = { git = "https://github.com/banool/async-graphql-reverse.git", branch = "main" }
 anyhow = { workspace = true }
 aptos-api-types = { workspace = true }
 aptos-backup-cli = { workspace = true }
