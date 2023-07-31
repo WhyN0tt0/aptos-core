@@ -70,7 +70,7 @@ impl Default for MempoolConfig {
             capacity: 2_000_000,
             capacity_bytes: 2 * 1024 * 1024 * 1024,
             capacity_per_user: 100,
-            default_failovers: 0,
+            default_failovers: 1,
             shared_mempool_peer_update_interval_ms: 1_000,
             system_transaction_timeout_secs: 600,
             system_transaction_gc_interval_ms: 60_000,
@@ -103,16 +103,17 @@ impl ConfigOptimizer for MempoolConfig {
 
         // Change the default configs for VFNs
         let mut modified_config = false;
+        if !node_type.is_validator() {
+            // Set the max_broadcasts_per_peer to 20 (default is 2)
+            if local_mempool_config_yaml["max_broadcasts_per_peer"].is_null() {
+                mempool_config.max_broadcasts_per_peer = 20;
+                modified_config = true;
+            }
+        }
         if node_type.is_validator_fullnode() {
             // Set the shared_mempool_max_concurrent_inbound_syncs to 16 (default is 4)
             if local_mempool_config_yaml["shared_mempool_max_concurrent_inbound_syncs"].is_null() {
                 mempool_config.shared_mempool_max_concurrent_inbound_syncs = 16;
-                modified_config = true;
-            }
-
-            // Set the max_broadcasts_per_peer to 20 (default is 2)
-            if local_mempool_config_yaml["max_broadcasts_per_peer"].is_null() {
-                mempool_config.max_broadcasts_per_peer = 20;
                 modified_config = true;
             }
 
@@ -125,13 +126,6 @@ impl ConfigOptimizer for MempoolConfig {
             // Set the shared_mempool_tick_interval_ms to 10 (default is 50)
             if local_mempool_config_yaml["shared_mempool_tick_interval_ms"].is_null() {
                 mempool_config.shared_mempool_tick_interval_ms = 10;
-                modified_config = true;
-            }
-        }
-        if !node_type.is_validator() {
-            // Set the max_broadcasts_per_peer to 20 (default is 2)
-            if local_mempool_config_yaml["max_broadcasts_per_peer"].is_null() {
-                mempool_config.max_broadcasts_per_peer = 20;
                 modified_config = true;
             }
         }
