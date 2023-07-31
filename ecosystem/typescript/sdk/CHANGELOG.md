@@ -4,6 +4,13 @@ All notable changes to the Aptos Node SDK will be captured in this file. This ch
 
 ## Unreleased
 
+- Add improvements for `IndexerClient`
+  - Export indexer types - `export * from "/indexer/generated/types"`
+  - Support for token v2 activities - `getTokenActivities`
+  - Aggregate query for token v2 activities - `getTokenActivitiesCount`
+  - Support for sorting indexer queries - `orderBy` optional argument in `extraArgs` arguments
+  - Support for get owned tokens by token_data_id - `getOwnedTokensByTokenDataId`
+
 ## 1.15.0 (2023-07-28)
 
 - Implementing `TransactionWorker` - a layer for managing and submitting as many transactions from a single account at once

@@ -20,6 +20,7 @@ import {
   GetCollectionDataQuery,
   GetCollectionsWithOwnedTokensQuery,
   GetTokenCurrentOwnerDataQuery,
+  GetOwnedTokensByTokenDataIdQuery,
 } from "../indexer/generated/operations";
 import {
   GetAccountTokensCount,
@@ -41,9 +42,18 @@ import {
   GetCollectionData,
   GetCollectionsWithOwnedTokens,
   GetTokenCurrentOwnerData,
+  GetOwnedTokensByTokenDataId,
 } from "../indexer/generated/queries";
 import { ClientConfig, post } from "../client";
 import { ApiError } from "./aptos_client";
+import {
+  Current_Collections_V2_Order_By,
+  Current_Collection_Ownership_V2_View_Order_By,
+  Current_Token_Datas_V2_Order_By,
+  Current_Token_Ownerships_V2_Order_By,
+  InputMaybe,
+  Token_Activities_V2_Order_By,
+} from "../indexer/generated/types";
 
 /**
  * Controls the number of results that are returned and the starting position of those results.
@@ -57,6 +67,14 @@ interface PaginationArgs {
   offset?: AnyNumber;
   limit?: number;
 }
+
+export type OrderBy = "asc" | "desc";
+
+export type SortingOptions<T> = {
+  [K in keyof T]?: T[K] extends InputMaybe<infer U> ? SortingOptions<U> | U | OrderBy : T[K] | OrderBy;
+};
+
+export type SortBy<T> = SortingOptions<T>;
 
 type TokenStandard = "v1" | "v2";
 
@@ -128,7 +146,11 @@ export class IndexerClient {
     return this.queryIndexer(graphqlQuery);
   }
 
+  // TOKENS //
+
   /**
+   * @deprecated please use `getOwnedTokens` query
+   *
    * Queries an Aptos account's NFTs by owner address
    *
    * @param ownerAddress Hex-encoded 32 byte Aptos account address
@@ -146,108 +168,39 @@ export class IndexerClient {
   }
 
   /**
-   * Queries a token activities by token id hash
+   * Queries a token activities by token address (token data id)
    *
-   * @param idHash token id hash
+   * @param idHash token address
    * @returns GetTokenActivitiesQuery response type
    */
-  async getTokenActivities(idHash: string, options?: PaginationArgs): Promise<GetTokenActivitiesQuery> {
+  async getTokenActivities(
+    idHash: MaybeHexString,
+    extraArgs?: {
+      tokenStandard?: TokenStandard;
+      options?: PaginationArgs;
+      orderBy?: SortBy<Token_Activities_V2_Order_By>[];
+    },
+  ): Promise<GetTokenActivitiesQuery> {
+    const tokenAddress = HexString.ensure(idHash).hex();
+    IndexerClient.validateAddress(tokenAddress);
+
+    const whereCondition: any = {
+      token_data_id: { _eq: tokenAddress },
+    };
+
+    if (extraArgs?.tokenStandard) {
+      whereCondition.token_standard = { _eq: extraArgs?.tokenStandard };
+    }
     const graphqlQuery = {
       query: GetTokenActivities,
-      variables: { idHash, offset: options?.offset, limit: options?.limit },
-    };
-    return this.queryIndexer(graphqlQuery);
-  }
-
-  /**
-   * Queries an account coin data
-   *
-   * @param ownerAddress Owner address
-   * @returns GetAccountCoinsDataQuery response type
-   */
-  async getAccountCoinsData(ownerAddress: MaybeHexString, options?: PaginationArgs): Promise<GetAccountCoinsDataQuery> {
-    const address = HexString.ensure(ownerAddress).hex();
-    IndexerClient.validateAddress(address);
-    const graphqlQuery = {
-      query: GetAccountCoinsData,
-      variables: { owner_address: address, offset: options?.offset, limit: options?.limit },
-    };
-    return this.queryIndexer(graphqlQuery);
-  }
-
-  /**
-   * Gets the count of tokens owned by an account
-   *
-   * @param ownerAddress Owner address
-   * @returns AccountTokensCountQuery response type
-   */
-  async getAccountTokensCount(ownerAddress: MaybeHexString): Promise<GetAccountTokensCountQuery> {
-    const address = HexString.ensure(ownerAddress).hex();
-    IndexerClient.validateAddress(address);
-    const graphqlQuery = {
-      query: GetAccountTokensCount,
-      variables: { owner_address: address },
-    };
-    return this.queryIndexer(graphqlQuery);
-  }
-
-  /**
-   * Gets the count of transactions submitted by an account
-   *
-   * @param address Account address
-   * @returns GetAccountTransactionsCountQuery response type
-   */
-  async getAccountTransactionsCount(accountAddress: MaybeHexString): Promise<GetAccountTransactionsCountQuery> {
-    const address = HexString.ensure(accountAddress).hex();
-    IndexerClient.validateAddress(address);
-    const graphqlQuery = {
-      query: GetAccountTransactionsCount,
-      variables: { address },
-    };
-    return this.queryIndexer(graphqlQuery);
-  }
-
-  /**
-   * Queries an account transactions data
-   *
-   * @param address Account address
-   * @returns GetAccountTransactionsDataQuery response type
-   */
-  async getAccountTransactionsData(
-    accountAddress: MaybeHexString,
-    options?: PaginationArgs,
-  ): Promise<GetAccountTransactionsDataQuery> {
-    const address = HexString.ensure(accountAddress).hex();
-    IndexerClient.validateAddress(address);
-    const graphqlQuery = {
-      query: GetAccountTransactionsData,
-      variables: { address, offset: options?.offset, limit: options?.limit },
-    };
-    return this.queryIndexer(graphqlQuery);
-  }
-
-  /**
-   * Queries delegated staking activities
-   *
-   * @param delegatorAddress Delegator address
-   * @param poolAddress Pool address
-   * @returns GetDelegatedStakingActivitiesQuery response type
-   */
-  async getDelegatedStakingActivities(
-    delegatorAddress: MaybeHexString,
-    poolAddress: MaybeHexString,
-  ): Promise<GetDelegatedStakingActivitiesQuery> {
-    const delegator = HexString.ensure(delegatorAddress).hex();
-    const pool = HexString.ensure(poolAddress).hex();
-    IndexerClient.validateAddress(delegator);
-    IndexerClient.validateAddress(pool);
-    const graphqlQuery = {
-      query: GetDelegatedStakingActivities,
       variables: {
-        delegatorAddress: delegator,
-        poolAddress: pool,
+        where_condition: whereCondition,
+        offset: extraArgs?.options?.offset,
+        limit: extraArgs?.options?.limit,
+        order_by: extraArgs?.orderBy,
       },
     };
+
     return this.queryIndexer(graphqlQuery);
   }
 
@@ -266,6 +219,41 @@ export class IndexerClient {
   }
 
   /**
+   * Gets the count of tokens owned by an account
+   *
+   * @param ownerAddress Owner address
+   * @returns AccountTokensCountQuery response type
+   */
+  async getAccountTokensCount(
+    ownerAddress: MaybeHexString,
+    extraArgs?: {
+      tokenStandard?: TokenStandard;
+      options?: PaginationArgs;
+    },
+  ): Promise<GetAccountTokensCountQuery> {
+    const whereCondition: any = {
+      owner_address: { _eq: ownerAddress },
+      amount: { _gt: "0" },
+    };
+
+    if (extraArgs?.tokenStandard) {
+      whereCondition.token_standard = { _eq: extraArgs?.tokenStandard };
+    }
+
+    const address = HexString.ensure(ownerAddress).hex();
+    IndexerClient.validateAddress(address);
+    const graphqlQuery = {
+      query: GetAccountTokensCount,
+      variables: {
+        where_condition: whereCondition,
+        offset: extraArgs?.options?.offset,
+        limit: extraArgs?.options?.limit,
+      },
+    };
+    return this.queryIndexer(graphqlQuery);
+  }
+
+  /**
    * Queries token data
    *
    * @param tokenId Token ID address
@@ -275,6 +263,8 @@ export class IndexerClient {
     tokenId: string,
     extraArgs?: {
       tokenStandard?: TokenStandard;
+      options?: PaginationArgs;
+      orderBy?: SortBy<Current_Token_Datas_V2_Order_By>[];
     },
   ): Promise<GetTokenDataQuery> {
     const tokenAddress = HexString.ensure(tokenId).hex();
@@ -289,7 +279,12 @@ export class IndexerClient {
     }
     const graphqlQuery = {
       query: GetTokenData,
-      variables: { where_condition: whereCondition },
+      variables: {
+        where_condition: whereCondition,
+        offset: extraArgs?.options?.offset,
+        limit: extraArgs?.options?.limit,
+        order_by: extraArgs?.orderBy,
+      },
     };
     return this.queryIndexer(graphqlQuery);
   }
@@ -308,6 +303,8 @@ export class IndexerClient {
     propertyVersion?: number,
     extraArgs?: {
       tokenStandard?: TokenStandard;
+      options?: PaginationArgs;
+      orderBy?: SortBy<Current_Token_Ownerships_V2_Order_By>[];
     },
   ): Promise<GetTokenOwnersDataQuery> {
     const tokenAddress = HexString.ensure(tokenId).hex();
@@ -327,7 +324,12 @@ export class IndexerClient {
 
     const graphqlQuery = {
       query: GetTokenOwnersData,
-      variables: { where_condition: whereCondition },
+      variables: {
+        where_condition: whereCondition,
+        offset: extraArgs?.options?.offset,
+        limit: extraArgs?.options?.limit,
+        order_by: extraArgs?.orderBy,
+      },
     };
     return this.queryIndexer(graphqlQuery);
   }
@@ -346,6 +348,8 @@ export class IndexerClient {
     propertyVersion?: number,
     extraArgs?: {
       tokenStandard?: TokenStandard;
+      options?: PaginationArgs;
+      orderBy?: SortBy<Current_Token_Ownerships_V2_Order_By>[];
     },
   ): Promise<GetTokenCurrentOwnerDataQuery> {
     const tokenAddress = HexString.ensure(tokenId).hex();
@@ -366,49 +370,12 @@ export class IndexerClient {
 
     const graphqlQuery = {
       query: GetTokenCurrentOwnerData,
-      variables: { where_condition: whereCondition },
-    };
-    return this.queryIndexer(graphqlQuery);
-  }
-
-  /**
-   * Queries top user transactions
-   *
-   * @param limit
-   * @returns GetTopUserTransactionsQuery response type
-   */
-  async getTopUserTransactions(limit: number): Promise<GetTopUserTransactionsQuery> {
-    const graphqlQuery = {
-      query: GetTopUserTransactions,
-      variables: { limit },
-    };
-    return this.queryIndexer(graphqlQuery);
-  }
-
-  /**
-   * Queries top user transactions
-   *
-   * @returns GetUserTransactionsQuery response type
-   */
-  async getUserTransactions(startVersion?: number, options?: PaginationArgs): Promise<GetUserTransactionsQuery> {
-    const graphqlQuery = {
-      query: GetUserTransactions,
-      variables: { start_version: startVersion, offset: options?.offset, limit: options?.limit },
-    };
-    return this.queryIndexer(graphqlQuery);
-  }
-
-  /**
-   * Queries current number of delegators in a pool
-   *
-   * @returns GetNumberOfDelegatorsQuery response type
-   */
-  async getNumberOfDelegators(poolAddress: MaybeHexString): Promise<GetNumberOfDelegatorsQuery> {
-    const address = HexString.ensure(poolAddress).hex();
-    IndexerClient.validateAddress(address);
-    const graphqlQuery = {
-      query: GetNumberOfDelegators,
-      variables: { poolAddress: address },
+      variables: {
+        where_condition: whereCondition,
+        offset: extraArgs?.options?.offset,
+        limit: extraArgs?.options?.limit,
+        order_by: extraArgs?.orderBy,
+      },
     };
     return this.queryIndexer(graphqlQuery);
   }
@@ -431,6 +398,7 @@ export class IndexerClient {
     extraArgs?: {
       tokenStandard?: TokenStandard;
       options?: PaginationArgs;
+      orderBy?: SortBy<Current_Token_Ownerships_V2_Order_By>[];
     },
   ): Promise<GetOwnedTokensQuery> {
     const address = HexString.ensure(ownerAddress).hex();
@@ -451,6 +419,45 @@ export class IndexerClient {
         where_condition: whereCondition,
         offset: extraArgs?.options?.offset,
         limit: extraArgs?.options?.limit,
+        order_by: extraArgs?.orderBy,
+      },
+    };
+    return this.queryIndexer(graphqlQuery);
+  }
+
+  /**
+   * Queries account's current owned tokens by the token address (token data id).
+   *
+   * @param tokenAddress The token address
+   * @returns GetOwnedTokensByTokenDataIdQuery response type
+   */
+  async getOwnedTokensByTokenDataId(
+    tokenAddress: MaybeHexString,
+    extraArgs?: {
+      tokenStandard?: TokenStandard;
+      options?: PaginationArgs;
+      orderBy?: SortBy<Current_Token_Ownerships_V2_Order_By>[];
+    },
+  ): Promise<GetOwnedTokensByTokenDataIdQuery> {
+    const address = HexString.ensure(tokenAddress).hex();
+    IndexerClient.validateAddress(address);
+
+    const whereCondition: any = {
+      token_data_id: { _eq: address },
+      amount: { _gt: 0 },
+    };
+
+    if (extraArgs?.tokenStandard) {
+      whereCondition.token_standard = { _eq: extraArgs?.tokenStandard };
+    }
+
+    const graphqlQuery = {
+      query: GetOwnedTokensByTokenDataId,
+      variables: {
+        where_condition: whereCondition,
+        offset: extraArgs?.options?.offset,
+        limit: extraArgs?.options?.limit,
+        order_by: extraArgs?.orderBy,
       },
     };
     return this.queryIndexer(graphqlQuery);
@@ -469,6 +476,7 @@ export class IndexerClient {
     extraArgs?: {
       tokenStandard?: TokenStandard;
       options?: PaginationArgs;
+      orderBy?: SortBy<Current_Token_Ownerships_V2_Order_By>[];
     },
   ): Promise<GetTokenOwnedFromCollectionQuery> {
     const ownerHexAddress = HexString.ensure(ownerAddress).hex();
@@ -493,6 +501,7 @@ export class IndexerClient {
         where_condition: whereCondition,
         offset: extraArgs?.options?.offset,
         limit: extraArgs?.options?.limit,
+        order_by: extraArgs?.orderBy,
       },
     };
     return this.queryIndexer(graphqlQuery);
@@ -537,6 +546,7 @@ export class IndexerClient {
     extraArgs?: {
       tokenStandard?: TokenStandard;
       options?: PaginationArgs;
+      orderBy?: SortBy<Current_Collections_V2_Order_By>[];
     },
   ): Promise<GetCollectionDataQuery> {
     const address = HexString.ensure(creatorAddress).hex();
@@ -557,6 +567,7 @@ export class IndexerClient {
         where_condition: whereCondition,
         offset: extraArgs?.options?.offset,
         limit: extraArgs?.options?.limit,
+        order_by: extraArgs?.orderBy,
       },
     };
     return this.queryIndexer(graphqlQuery);
@@ -574,6 +585,7 @@ export class IndexerClient {
     collectionName: string,
     extraArgs?: {
       tokenStandard?: TokenStandard;
+      orderBy?: SortBy<Current_Collections_V2_Order_By>[];
     },
   ): Promise<string> {
     return (await this.getCollectionData(creatorAddress, collectionName, extraArgs)).current_collections_v2[0]
@@ -591,6 +603,7 @@ export class IndexerClient {
     extraArgs?: {
       tokenStandard?: TokenStandard;
       options?: PaginationArgs;
+      orderBy?: SortBy<Current_Collection_Ownership_V2_View_Order_By>[];
     },
   ): Promise<GetCollectionsWithOwnedTokensQuery> {
     const ownerHexAddress = HexString.ensure(ownerAddress).hex();
@@ -610,7 +623,131 @@ export class IndexerClient {
         where_condition: whereCondition,
         offset: extraArgs?.options?.offset,
         limit: extraArgs?.options?.limit,
+        order_by: extraArgs?.orderBy,
       },
+    };
+    return this.queryIndexer(graphqlQuery);
+  }
+
+  // TRANSACTIONS //
+
+  /**
+   * Gets the count of transactions submitted by an account
+   *
+   * @param address Account address
+   * @returns GetAccountTransactionsCountQuery response type
+   */
+  async getAccountTransactionsCount(accountAddress: MaybeHexString): Promise<GetAccountTransactionsCountQuery> {
+    const address = HexString.ensure(accountAddress).hex();
+    IndexerClient.validateAddress(address);
+    const graphqlQuery = {
+      query: GetAccountTransactionsCount,
+      variables: { address },
+    };
+    return this.queryIndexer(graphqlQuery);
+  }
+
+  /**
+   * Queries an account transactions data
+   *
+   * @param address Account address
+   * @returns GetAccountTransactionsDataQuery response type
+   */
+  async getAccountTransactionsData(
+    accountAddress: MaybeHexString,
+    options?: PaginationArgs,
+  ): Promise<GetAccountTransactionsDataQuery> {
+    const address = HexString.ensure(accountAddress).hex();
+    IndexerClient.validateAddress(address);
+    const graphqlQuery = {
+      query: GetAccountTransactionsData,
+      variables: { address, offset: options?.offset, limit: options?.limit },
+    };
+    return this.queryIndexer(graphqlQuery);
+  }
+
+  /**
+   * Queries top user transactions
+   *
+   * @param limit
+   * @returns GetTopUserTransactionsQuery response type
+   */
+  async getTopUserTransactions(limit: number): Promise<GetTopUserTransactionsQuery> {
+    const graphqlQuery = {
+      query: GetTopUserTransactions,
+      variables: { limit },
+    };
+    return this.queryIndexer(graphqlQuery);
+  }
+
+  /**
+   * Queries top user transactions
+   *
+   * @returns GetUserTransactionsQuery response type
+   */
+  async getUserTransactions(startVersion?: number, options?: PaginationArgs): Promise<GetUserTransactionsQuery> {
+    const graphqlQuery = {
+      query: GetUserTransactions,
+      variables: { start_version: startVersion, offset: options?.offset, limit: options?.limit },
+    };
+    return this.queryIndexer(graphqlQuery);
+  }
+
+  // STAKING //
+
+  /**
+   * Queries delegated staking activities
+   *
+   * @param delegatorAddress Delegator address
+   * @param poolAddress Pool address
+   * @returns GetDelegatedStakingActivitiesQuery response type
+   */
+  async getDelegatedStakingActivities(
+    delegatorAddress: MaybeHexString,
+    poolAddress: MaybeHexString,
+  ): Promise<GetDelegatedStakingActivitiesQuery> {
+    const delegator = HexString.ensure(delegatorAddress).hex();
+    const pool = HexString.ensure(poolAddress).hex();
+    IndexerClient.validateAddress(delegator);
+    IndexerClient.validateAddress(pool);
+    const graphqlQuery = {
+      query: GetDelegatedStakingActivities,
+      variables: {
+        delegatorAddress: delegator,
+        poolAddress: pool,
+      },
+    };
+    return this.queryIndexer(graphqlQuery);
+  }
+
+  /**
+   * Queries current number of delegators in a pool
+   *
+   * @returns GetNumberOfDelegatorsQuery response type
+   */
+  async getNumberOfDelegators(poolAddress: MaybeHexString): Promise<GetNumberOfDelegatorsQuery> {
+    const address = HexString.ensure(poolAddress).hex();
+    IndexerClient.validateAddress(address);
+    const graphqlQuery = {
+      query: GetNumberOfDelegators,
+      variables: { poolAddress: address },
+    };
+    return this.queryIndexer(graphqlQuery);
+  }
+
+  // ACCOUNT //
+  /**
+   * Queries an account coin data
+   *
+   * @param ownerAddress Owner address
+   * @returns GetAccountCoinsDataQuery response type
+   */
+  async getAccountCoinsData(ownerAddress: MaybeHexString, options?: PaginationArgs): Promise<GetAccountCoinsDataQuery> {
+    const address = HexString.ensure(ownerAddress).hex();
+    IndexerClient.validateAddress(address);
+    const graphqlQuery = {
+      query: GetAccountCoinsData,
+      variables: { owner_address: address, offset: options?.offset, limit: options?.limit },
     };
     return this.queryIndexer(graphqlQuery);
   }
