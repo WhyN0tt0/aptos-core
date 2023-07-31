@@ -47,12 +47,14 @@ import {
 import { ClientConfig, post } from "../client";
 import { ApiError } from "./aptos_client";
 import {
+  Account_Transactions_Order_By,
   Current_Collections_V2_Order_By,
   Current_Collection_Ownership_V2_View_Order_By,
   Current_Token_Datas_V2_Order_By,
   Current_Token_Ownerships_V2_Order_By,
   InputMaybe,
   Token_Activities_V2_Order_By,
+  User_Transactions_Order_By,
 } from "../indexer/generated/types";
 
 /**
@@ -655,13 +657,26 @@ export class IndexerClient {
    */
   async getAccountTransactionsData(
     accountAddress: MaybeHexString,
-    options?: PaginationArgs,
+    extraArgs?: {
+      options?: PaginationArgs;
+      orderBy?: SortBy<Account_Transactions_Order_By>[];
+    },
   ): Promise<GetAccountTransactionsDataQuery> {
     const address = HexString.ensure(accountAddress).hex();
     IndexerClient.validateAddress(address);
+
+    const whereCondition: any = {
+      account_address: { _eq: address },
+    };
+
     const graphqlQuery = {
       query: GetAccountTransactionsData,
-      variables: { address, offset: options?.offset, limit: options?.limit },
+      variables: {
+        where_condition: whereCondition,
+        offset: extraArgs?.options?.offset,
+        limit: extraArgs?.options?.limit,
+        order_by: extraArgs?.orderBy,
+      },
     };
     return this.queryIndexer(graphqlQuery);
   }
@@ -685,10 +700,25 @@ export class IndexerClient {
    *
    * @returns GetUserTransactionsQuery response type
    */
-  async getUserTransactions(startVersion?: number, options?: PaginationArgs): Promise<GetUserTransactionsQuery> {
+  async getUserTransactions(
+    startVersion?: number,
+    extraArgs?: {
+      options?: PaginationArgs;
+      orderBy?: SortBy<User_Transactions_Order_By>[];
+    },
+  ): Promise<GetUserTransactionsQuery> {
+    const whereCondition: any = {
+      version: { _lte: startVersion },
+    };
+
     const graphqlQuery = {
       query: GetUserTransactions,
-      variables: { start_version: startVersion, offset: options?.offset, limit: options?.limit },
+      variables: {
+        where_condition: whereCondition,
+        offset: extraArgs?.options?.offset,
+        limit: extraArgs?.options?.limit,
+        order_by: extraArgs?.orderBy,
+      },
     };
     return this.queryIndexer(graphqlQuery);
   }

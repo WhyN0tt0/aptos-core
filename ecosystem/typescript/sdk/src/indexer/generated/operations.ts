@@ -38,16 +38,17 @@ export type GetAccountTransactionsCountQueryVariables = Types.Exact<{
 }>;
 
 
-export type GetAccountTransactionsCountQuery = { __typename?: 'query_root', move_resources_aggregate: { __typename?: 'move_resources_aggregate', aggregate?: { __typename?: 'move_resources_aggregate_fields', count: number } | null } };
+export type GetAccountTransactionsCountQuery = { __typename?: 'query_root', account_transactions_aggregate: { __typename?: 'account_transactions_aggregate', aggregate?: { __typename?: 'account_transactions_aggregate_fields', count: number } | null } };
 
 export type GetAccountTransactionsDataQueryVariables = Types.Exact<{
-  address?: Types.InputMaybe<Types.Scalars['String']>;
-  limit?: Types.InputMaybe<Types.Scalars['Int']>;
+  where_condition: Types.Account_Transactions_Bool_Exp;
   offset?: Types.InputMaybe<Types.Scalars['Int']>;
+  limit?: Types.InputMaybe<Types.Scalars['Int']>;
+  order_by?: Types.InputMaybe<Array<Types.Account_Transactions_Order_By> | Types.Account_Transactions_Order_By>;
 }>;
 
 
-export type GetAccountTransactionsDataQuery = { __typename?: 'query_root', move_resources: Array<{ __typename?: 'move_resources', transaction_version: any }> };
+export type GetAccountTransactionsDataQuery = { __typename?: 'query_root', account_transactions: Array<{ __typename?: 'account_transactions', transaction_version: any, token_activities_v2: Array<{ __typename?: 'token_activities_v2', after_value?: string | null, before_value?: string | null, entry_function_id_str?: string | null, event_account_address: string, event_index: any, from_address?: string | null, is_fungible_v2?: boolean | null, property_version_v1: any, to_address?: string | null, token_amount: any, token_data_id: string, token_standard: string, transaction_timestamp: any, transaction_version: any, type: string }> }> };
 
 export type GetCollectionDataQueryVariables = Types.Exact<{
   where_condition: Types.Current_Collections_V2_Bool_Exp;
@@ -174,10 +175,13 @@ export type GetTopUserTransactionsQueryVariables = Types.Exact<{
 export type GetTopUserTransactionsQuery = { __typename?: 'query_root', user_transactions: Array<{ __typename?: 'user_transactions', version: any }> };
 
 export type GetUserTransactionsQueryVariables = Types.Exact<{
-  limit?: Types.InputMaybe<Types.Scalars['Int']>;
-  start_version?: Types.InputMaybe<Types.Scalars['bigint']>;
+  where_condition: Types.User_Transactions_Bool_Exp;
   offset?: Types.InputMaybe<Types.Scalars['Int']>;
+  limit?: Types.InputMaybe<Types.Scalars['Int']>;
+  order_by?: Types.InputMaybe<Array<Types.User_Transactions_Order_By> | Types.User_Transactions_Order_By>;
 }>;
 
 
 export type GetUserTransactionsQuery = { __typename?: 'query_root', user_transactions: Array<{ __typename?: 'user_transactions', version: any }> };
+
+export type TokenActivitiesFieldsFragment = { __typename?: 'token_activities_v2', after_value?: string | null, before_value?: string | null, entry_function_id_str?: string | null, event_account_address: string, event_index: any, from_address?: string | null, is_fungible_v2?: boolean | null, property_version_v1: any, to_address?: string | null, token_amount: any, token_data_id: string, token_standard: string, transaction_timestamp: any, transaction_version: any, type: string };
