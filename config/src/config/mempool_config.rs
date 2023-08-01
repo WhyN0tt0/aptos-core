@@ -60,7 +60,7 @@ impl Default for MempoolConfig {
         MempoolConfig {
             shared_mempool_tick_interval_ms: 50,
             shared_mempool_backoff_interval_ms: 30_000,
-            shared_mempool_batch_size: 600,
+            shared_mempool_batch_size: 200,
             shared_mempool_max_batch_bytes: MAX_APPLICATION_MESSAGE_SIZE as u64,
             shared_mempool_ack_timeout_ms: 2_000,
             shared_mempool_max_concurrent_inbound_syncs: 4,
@@ -107,6 +107,11 @@ impl ConfigOptimizer for MempoolConfig {
             // Set the max_broadcasts_per_peer to 20 (default is 2)
             if local_mempool_config_yaml["max_broadcasts_per_peer"].is_null() {
                 mempool_config.max_broadcasts_per_peer = 20;
+                modified_config = true;
+            }
+            // Set the batch size per broadcast to 400 (default is 200)
+            if local_mempool_config_yaml["max_broadcasts_per_peer"].is_null() {
+                mempool_config.shared_mempool_batch_size = 400;
                 modified_config = true;
             }
         }
@@ -161,7 +166,7 @@ mod tests {
         );
         assert_eq!(mempool_config.max_broadcasts_per_peer, 20);
         assert_eq!(mempool_config.default_failovers, 0);
-        assert_eq!(mempool_config.shared_mempool_batch_size, 600);
+        assert_eq!(mempool_config.shared_mempool_batch_size, 400);
         assert_eq!(mempool_config.shared_mempool_tick_interval_ms, 10);
     }
 
